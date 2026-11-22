@@ -62,6 +62,10 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
       return 'Email is required';
     }
 
+    if (email.trim().length > AdminService.maxEmailLength) {
+      return 'Email must be at most ${AdminService.maxEmailLength} characters';
+    }
+
     final emailPattern =
     RegExp(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$');
 
@@ -289,6 +293,8 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
             keyboardType: isPassword
                 ? TextInputType.text
                 : TextInputType.emailAddress,
+            // Email shows a live "12/254" counter; password has no limit.
+            maxLength: isPassword ? null : AdminService.maxEmailLength,
             style: const TextStyle(
               color: Colors.white,
               fontSize: 15,
@@ -299,6 +305,10 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
               hintStyle: const TextStyle(
                 color: Colors.white38,
                 fontSize: 14,
+              ),
+              counterStyle: const TextStyle(
+                color: Colors.white54,
+                fontSize: 11,
               ),
               prefixIcon: Icon(
                 icon,
@@ -688,4 +698,4 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
       ),
     );
   }
-}
+}

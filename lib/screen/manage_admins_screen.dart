@@ -347,10 +347,19 @@ class _ManageAdminsScreenState extends State<ManageAdminsScreen> {
             keyboardType: TextInputType.emailAddress,
             textInputAction: TextInputAction.next,
             autocorrect: false,
-            decoration: _input('Email Address', Icons.email_outlined),
+            maxLength: AdminService.maxEmailLength,
+            decoration: _input('Email Address', Icons.email_outlined)
+                .copyWith(
+              helperText: 'Maximum ${AdminService.maxEmailLength} characters',
+              helperStyle: const TextStyle(color: Colors.white54),
+              counterStyle: const TextStyle(color: Colors.white54),
+            ),
             validator: (v) {
               final value = v?.trim() ?? '';
               if (value.isEmpty) return 'Email is required';
+              if (value.length > AdminService.maxEmailLength) {
+                return 'At most ${AdminService.maxEmailLength} characters';
+              }
               final ok = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(value);
               return ok ? null : 'Enter a valid email';
             },

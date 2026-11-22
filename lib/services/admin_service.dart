@@ -37,6 +37,10 @@ class AdminService {
   // current Admin out and sign in as the new user instead.
   static const String _creatorAppName = 'admin-account-creator';
 
+  /// Longest email address allowed by the email standard (RFC 5321).
+  /// The same limit is used in the game and in the Firestore rules.
+  static const int maxEmailLength = 254;
+
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final AdminLogService _log = AdminLogService();
@@ -135,6 +139,10 @@ class AdminService {
 
     if (cleanName.isEmpty || cleanEmail.isEmpty) {
       throw Exception('Name and email are required.');
+    }
+
+    if (cleanEmail.length > maxEmailLength) {
+      throw Exception('Email must be at most $maxEmailLength characters.');
     }
 
     if (password.length < 8) {
