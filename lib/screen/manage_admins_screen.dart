@@ -1,37 +1,179 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
+import '../models/admin_model.dart';
 import '../services/admin_service.dart';
+import '../theme/app_theme.dart';
 
 class ManageAdminsScreen extends StatefulWidget {
   const ManageAdminsScreen({super.key});
 
   @override
-  State<ManageAdminsScreen> createState() =>
-      _ManageAdminsScreenState();
+  State<ManageAdminsScreen> createState() => _ManageAdminsScreenState();
 }
 
 class _ManageAdminsScreenState extends State<ManageAdminsScreen> {
   final AdminService _adminService = AdminService();
 
-  final TextEditingController _uidController =
-  TextEditingController();
+  final _createFormKey = GlobalKey<FormState>();
+  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+  final TextEditingController _confirmController = TextEditingController();
 
-  final TextEditingController _searchController =
-  TextEditingController();
+  final TextEditingController _uidController = TextEditingController();
+  final TextEditingController _searchController = TextEditingController();
 
-  bool _isAdding = false;
-  String? _removingUid;
+  late final Stream<List<AdminModel>> _adminsStream;
+
+  bool _isCreating = false;
+  bool _isAddingByUid = false;
+  bool _showPassword = false;
+  String? _busyUid;
   String _searchQuery = '';
 
-  static const Color background = Color(0xFF0B0B2B);
-  static const Color purple = Color(0xFF7B2FF7);
-  static const Color cyan = Color(0xFF00E5FF);
-  static const Color pink = Color(0xFFFF2BD6);
-  static const Color yellow = Color(0xFFFFD600);
-  static const Color cardColor = Color(0xFF171F35);
 
-  Future<void> _addAdmin() async {
+  @override
+  void initState() {
+    super.initState();
+    _adminsStream = _adminService.getAdmins();
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _emailController.dispose();
+    _passwordController.dispose();
+    _confirmController.dispose();
+    _uidController.dispose();
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  String _cleanError(Object e) =>
+      e.toString().replaceFirst('Exception: ', '');
+
+  void _showMessage(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: AppTheme.surface,
+      ),
+    );
+  }
+
+  Future<bool> _confirm({
+    required String title,
+    required String body,
+    required String action,
+    Color actionColor = AppTheme.purple,
+  }) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: AppTheme.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        title: Text(title, style: const TextStyle(color: AppTheme.neonCyan)),
+        content: Text(body, style: const TextStyle(color: Colors.white70)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: actionColor,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(action),
+          ),
+        ],
+      ),
+    );
+
+    return result == true;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Actions
+  // ---------------------------------------------------------------------------
+
+  Future<void> _createAdmin() async {
+    if (!_createFormKey.currentState!.validate()) return;
+
+    FocusScope.of(context).unfocus();
+    setState(() => _isCreating = true);
+
+    final name = _nameController.text.trim();
+    final email = _emailController.text.trim();
+
+    try {
+      await _adminService.createAdmin(
+        name: name,
+        email: email,
+        password: _passwordController.text,
+      );
+
+      if (!mounted) return;
+
+      _createFormKey.currentState!.reset();
+      _nameController.clear();
+      _emailController.clear();
+      _passwordController.clear();
+      _confirmController.clear();
+
+      _showMessage(
+        'Admin $name created. They can now sign in with $email.',
+      );
+    } on EmailAlreadyRegisteredException catch (e) {
+      if (!mounted) return;
+
+      if (!e.isKnownPlayer) {
+        _showMessage(e.toString());
+        return;
+      }
+
+      final promote = await _confirm(
+        title: 'Email Already Registered',
+        body: '${e.email} already belongs to the player '
+            '"${e.playerName ?? e.email}".\n\n'
+            'Grant Admin access to that existing account instead? '
+            'They will sign in with their current game password.',
+        action: 'Grant Access',
+      );
+
+      if (!promote) return;
+
+      try {
+        await _adminService.addAdmin(
+          e.playerUid!,
+          name: name.isNotEmpty ? name : (e.playerName ?? ''),
+          email: e.email,
+        );
+        _clearCreateForm();
+        _showMessage('Admin access granted to ${e.email}.');
+      } catch (err) {
+        _showMessage(_cleanError(err));
+      }
+    } catch (e) {
+      _showMessage(_cleanError(e));
+    } finally {
+      if (mounted) setState(() => _isCreating = false);
+    }
+  }
+
+  void _clearCreateForm() {
+    _nameController.clear();
+    _emailController.clear();
+    _passwordController.clear();
+    _confirmController.clear();
+  }
+
+  Future<void> _addByUid() async {
     final uid = _uidController.text.trim();
 
     if (uid.isEmpty) {
@@ -40,100 +182,95 @@ class _ManageAdminsScreenState extends State<ManageAdminsScreen> {
     }
 
     FocusScope.of(context).unfocus();
-
-    setState(() => _isAdding = true);
+    setState(() => _isAddingByUid = true);
 
     try {
       await _adminService.addAdmin(uid);
-
       if (!mounted) return;
-
       _uidController.clear();
-      _showMessage('Admin authorization record added.');
+      _showMessage('Admin access granted.');
     } catch (e) {
-      if (!mounted) return;
-
-      _showMessage(
-        e.toString().replaceFirst('Exception: ', ''),
-      );
+      _showMessage(_cleanError(e));
     } finally {
-      if (mounted) {
-        setState(() => _isAdding = false);
-      }
+      if (mounted) setState(() => _isAddingByUid = false);
     }
   }
 
-  Future<void> _removeAdmin(String uid, bool isCurrentAdmin) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          backgroundColor: cardColor,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          title: const Text(
-            'Remove Admin Access?',
-            style: TextStyle(color: cyan),
-          ),
-          content: Text(
-            isCurrentAdmin
-                ? 'You are removing your own Admin access. '
-                'You may be signed out after this action. Continue?'
-                : 'This account will lose Admin Panel access. '
-                'The Firebase Authentication account itself '
-                'will not be deleted.',
-            style: const TextStyle(color: Colors.white70),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () =>
-                  Navigator.pop(dialogContext, false),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.redAccent,
-                foregroundColor: Colors.white,
-              ),
-              onPressed: () =>
-                  Navigator.pop(dialogContext, true),
-              child: const Text('Remove Access'),
-            ),
-          ],
-        );
-      },
+  Future<void> _sendReset(AdminModel admin) async {
+    if (admin.email.isEmpty) {
+      _showMessage(
+        'No email on record for this Admin. '
+        'It will be filled in the next time they sign in.',
+      );
+      return;
+    }
+
+    final ok = await _confirm(
+      title: 'Send Password Reset?',
+      body: 'A password reset link will be emailed to ${admin.email}.',
+      action: 'Send Email',
     );
 
-    if (confirmed != true || !mounted) return;
+    if (!ok) return;
 
-    setState(() => _removingUid = uid);
+    setState(() => _busyUid = admin.uid);
 
     try {
-      await _adminService.removeAdmin(uid);
-
-      if (!mounted) return;
-
-      _showMessage('Admin authorization record removed.');
+      await _adminService.sendPasswordReset(admin.email);
+      _showMessage('Password reset email sent to ${admin.email}.');
     } catch (e) {
-      if (!mounted) return;
-
-      _showMessage(
-        e.toString().replaceFirst('Exception: ', ''),
-      );
+      _showMessage(_cleanError(e));
     } finally {
-      if (mounted) {
-        setState(() => _removingUid = null);
-      }
+      if (mounted) setState(() => _busyUid = null);
     }
   }
 
-  void _showMessage(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        behavior: SnackBarBehavior.floating,
-        backgroundColor: cardColor,
+  Future<void> _removeAdmin(AdminModel admin, bool isCurrentAdmin) async {
+    final ok = await _confirm(
+      title: 'Remove Admin Access?',
+      body: isCurrentAdmin
+          ? 'You are removing your own Admin access. '
+              'You will be signed out. Continue?'
+          : '${admin.displayName} will lose access to this Admin Panel. '
+              'Their login itself is not deleted.',
+      action: 'Remove Access',
+      actionColor: Colors.redAccent,
+    );
+
+    if (!ok || !mounted) return;
+
+    setState(() => _busyUid = admin.uid);
+
+    try {
+      await _adminService.removeAdmin(admin.uid);
+      _showMessage('Admin access removed.');
+    } catch (e) {
+      _showMessage(_cleanError(e));
+    } finally {
+      if (mounted) setState(() => _busyUid = null);
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // UI helpers
+  // ---------------------------------------------------------------------------
+
+  InputDecoration _input(String label, IconData icon, {Widget? suffix}) {
+    return InputDecoration(
+      labelText: label,
+      labelStyle: const TextStyle(color: Colors.white60),
+      prefixIcon: Icon(icon, color: AppTheme.neonCyan),
+      suffixIcon: suffix,
+      filled: true,
+      fillColor: AppTheme.surface,
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: AppTheme.purple.withValues(alpha: 0.4)),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: AppTheme.neonCyan, width: 1.5),
       ),
     );
   }
@@ -153,27 +290,187 @@ class _ManageAdminsScreenState extends State<ManageAdminsScreen> {
         const SizedBox(height: 5),
         Text(
           subtitle,
-          style: const TextStyle(
-            color: Colors.white60,
-            fontSize: 12,
-          ),
+          style: const TextStyle(color: Colors.white60, fontSize: 12),
         ),
       ],
     );
   }
 
-  Widget _adminCard(String uid, bool isCurrentAdmin) {
-    final isRemoving = _removingUid == uid;
+  Widget _primaryButton({
+    required bool busy,
+    required VoidCallback onPressed,
+    required IconData icon,
+    required String label,
+    required String busyLabel,
+  }) {
+    return SizedBox(
+      width: double.infinity,
+      height: 48,
+      child: ElevatedButton.icon(
+        onPressed: busy ? null : onPressed,
+        icon: busy
+            ? const SizedBox(
+                height: 18,
+                width: 18,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.white,
+                ),
+              )
+            : Icon(icon),
+        label: Text(busy ? busyLabel : label),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: AppTheme.purple,
+          foregroundColor: Colors.white,
+        ),
+      ),
+    );
+  }
+
+  Widget _createAdminForm() {
+    return Form(
+      key: _createFormKey,
+      child: Column(
+        children: [
+          TextFormField(
+            controller: _nameController,
+            style: const TextStyle(color: Colors.white),
+            textInputAction: TextInputAction.next,
+            decoration: _input('Full Name', Icons.badge_outlined),
+            validator: (v) =>
+                v == null || v.trim().isEmpty ? 'Name is required' : null,
+          ),
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: _emailController,
+            style: const TextStyle(color: Colors.white),
+            keyboardType: TextInputType.emailAddress,
+            textInputAction: TextInputAction.next,
+            autocorrect: false,
+            decoration: _input('Email Address', Icons.email_outlined),
+            validator: (v) {
+              final value = v?.trim() ?? '';
+              if (value.isEmpty) return 'Email is required';
+              final ok = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(value);
+              return ok ? null : 'Enter a valid email';
+            },
+          ),
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: _passwordController,
+            style: const TextStyle(color: Colors.white),
+            obscureText: !_showPassword,
+            textInputAction: TextInputAction.next,
+            decoration: _input(
+              'Temporary Password',
+              Icons.lock_outline,
+              suffix: IconButton(
+                onPressed: () =>
+                    setState(() => _showPassword = !_showPassword),
+                icon: Icon(
+                  _showPassword ? Icons.visibility_off : Icons.visibility,
+                  color: Colors.white54,
+                ),
+              ),
+            ),
+            validator: (v) => (v ?? '').length < 8
+                ? 'At least 8 characters'
+                : null,
+          ),
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: _confirmController,
+            style: const TextStyle(color: Colors.white),
+            obscureText: !_showPassword,
+            decoration: _input('Confirm Password', Icons.lock_reset),
+            validator: (v) => v != _passwordController.text
+                ? 'Passwords do not match'
+                : null,
+          ),
+          const SizedBox(height: 12),
+          _primaryButton(
+            busy: _isCreating,
+            onPressed: _createAdmin,
+            icon: Icons.person_add_alt_1,
+            label: 'Create Admin',
+            busyLabel: 'Creating...',
+          ),
+          const SizedBox(height: 10),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppTheme.neonYellow.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AppTheme.neonYellow.withValues(alpha: 0.3)),
+            ),
+            child: const Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.info_outline, color: AppTheme.neonYellow, size: 19),
+                SizedBox(width: 9),
+                Expanded(
+                  child: Text(
+                    'Creates a new login and gives it Admin access. Share '
+                    'the temporary password privately; the new Admin can '
+                    'change it with "Forgot password" on the login screen.',
+                    style: TextStyle(color: Colors.white70, fontSize: 11),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _addByUidSection() {
+    return Theme(
+      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+      child: ExpansionTile(
+        tilePadding: EdgeInsets.zero,
+        iconColor: AppTheme.neonCyan,
+        collapsedIconColor: Colors.white54,
+        title: const Text(
+          'Add existing account by UID',
+          style: TextStyle(color: Colors.white70, fontSize: 14),
+        ),
+        subtitle: const Text(
+          'For a login that already exists in Firebase Authentication.',
+          style: TextStyle(color: Colors.white38, fontSize: 11),
+        ),
+        children: [
+          TextField(
+            controller: _uidController,
+            style: const TextStyle(color: Colors.white),
+            decoration: _input('Firebase Authentication UID', Icons.fingerprint),
+          ),
+          const SizedBox(height: 10),
+          _primaryButton(
+            busy: _isAddingByUid,
+            onPressed: _addByUid,
+            icon: Icons.verified_user_outlined,
+            label: 'Grant Admin Access',
+            busyLabel: 'Adding...',
+          ),
+          const SizedBox(height: 8),
+        ],
+      ),
+    );
+  }
+
+  Widget _adminCard(AdminModel admin, bool isCurrentAdmin) {
+    final isBusy = _busyUid == admin.uid;
 
     return Card(
-      color: cardColor,
+      color: AppTheme.surface,
       margin: const EdgeInsets.only(bottom: 12),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
         side: BorderSide(
           color: isCurrentAdmin
-              ? cyan.withValues(alpha: 0.6)
-              : purple.withValues(alpha: 0.35),
+              ? AppTheme.neonCyan.withValues(alpha: 0.6)
+              : AppTheme.purple.withValues(alpha: 0.35),
         ),
       ),
       child: Padding(
@@ -183,11 +480,11 @@ class _ManageAdminsScreenState extends State<ManageAdminsScreen> {
             CircleAvatar(
               radius: 23,
               backgroundColor: isCurrentAdmin
-                  ? cyan.withValues(alpha: 0.15)
-                  : purple.withValues(alpha: 0.2),
+                  ? AppTheme.neonCyan.withValues(alpha: 0.15)
+                  : AppTheme.purple.withValues(alpha: 0.2),
               child: Icon(
                 Icons.admin_panel_settings,
-                color: isCurrentAdmin ? cyan : pink,
+                color: isCurrentAdmin ? AppTheme.neonCyan : AppTheme.neonPink,
                 size: 25,
               ),
             ),
@@ -196,101 +493,108 @@ class _ManageAdminsScreenState extends State<ManageAdminsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    isCurrentAdmin
-                        ? 'Current Admin'
-                        : 'Admin Account',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
-                    ),
-                  ),
-                  const SizedBox(height: 5),
-                  Text(
-                    uid,
-                    style: const TextStyle(
-                      color: Colors.white54,
-                      fontSize: 10,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 9,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: isCurrentAdmin
-                          ? cyan.withValues(alpha: 0.12)
-                          : purple.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      isCurrentAdmin ? 'YOU' : 'ADMIN',
-                      style: TextStyle(
-                        color: isCurrentAdmin ? cyan : pink,
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          admin.name.isNotEmpty ? admin.name : 'Admin',
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                        ),
                       ),
-                    ),
+                      if (isCurrentAdmin) ...[
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppTheme.neonCyan.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: const Text(
+                            'YOU',
+                            style: TextStyle(
+                              color: AppTheme.neonCyan,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    admin.email.isNotEmpty ? admin.email : 'Email not recorded',
+                    style: const TextStyle(color: Colors.white70, fontSize: 12),
+                  ),
+                  const SizedBox(height: 2),
+                  SelectableText(
+                    admin.uid,
+                    style: const TextStyle(color: Colors.white38, fontSize: 10),
                   ),
                 ],
               ),
             ),
-            if (isRemoving)
-              const SizedBox(
-                width: 22,
-                height: 22,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: Colors.redAccent,
+            if (isBusy)
+              const Padding(
+                padding: EdgeInsets.all(12),
+                child: SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: AppTheme.neonCyan,
+                  ),
                 ),
               )
-            else
+            else ...[
+              IconButton(
+                tooltip: 'Send Password Reset Email',
+                onPressed: () => _sendReset(admin),
+                icon: const Icon(Icons.lock_reset, color: AppTheme.neonYellow),
+              ),
               IconButton(
                 tooltip: 'Remove Admin Access',
-                onPressed: () => _removeAdmin(
-                  uid,
-                  isCurrentAdmin,
-                ),
-                icon: const Icon(
-                  Icons.delete_outline,
-                  color: Colors.redAccent,
-                ),
+                onPressed: () => _removeAdmin(admin, isCurrentAdmin),
+                icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
               ),
+            ],
           ],
         ),
       ),
     );
   }
 
-  @override
-  void dispose() {
-    _uidController.dispose();
-    _searchController.dispose();
-    super.dispose();
-  }
+  // ---------------------------------------------------------------------------
+  // Build
+  // ---------------------------------------------------------------------------
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: background,
+      backgroundColor: AppTheme.background,
       appBar: AppBar(
-        backgroundColor: background,
-        foregroundColor: cyan,
+        backgroundColor: AppTheme.background,
+        foregroundColor: AppTheme.neonCyan,
         title: const Text(
           'Admin Management',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
       ),
-      body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-        stream: _adminService.getAdmins(),
+      body: StreamBuilder<List<AdminModel>>(
+        stream: _adminsStream,
         builder: (context, snapshot) {
           if (snapshot.hasError) {
             return const Center(
               child: Text(
-                'Unable to load Admin records.',
+                'Unable to load Admin records. Check Firestore rules.',
                 style: TextStyle(color: Colors.redAccent),
               ),
             );
@@ -298,57 +602,48 @@ class _ManageAdminsScreenState extends State<ManageAdminsScreen> {
 
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(
-              child: CircularProgressIndicator(color: cyan),
+              child: CircularProgressIndicator(color: AppTheme.neonCyan),
             );
           }
 
-          final admins = snapshot.data?.docs ?? [];
+          final admins = snapshot.data ?? [];
           final currentUid = _adminService.currentAdminUid;
+          final query = _searchQuery.toLowerCase();
 
           final filteredAdmins = admins.where((admin) {
-            return admin.id.toLowerCase().contains(
-              _searchQuery.toLowerCase(),
-            );
+            return admin.uid.toLowerCase().contains(query) ||
+                admin.name.toLowerCase().contains(query) ||
+                admin.email.toLowerCase().contains(query);
           }).toList();
 
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              _sectionTitle(
-                'Admin Overview',
-                'Manage accounts authorized to access this panel.',
-              ),
-              const SizedBox(height: 18),
               Container(
                 padding: const EdgeInsets.all(18),
                 decoration: BoxDecoration(
-                  color: cardColor,
+                  color: AppTheme.surface,
                   borderRadius: BorderRadius.circular(15),
-                  border: Border.all(
-                    color: cyan.withValues(alpha: 0.4),
-                  ),
+                  border: Border.all(color: AppTheme.neonCyan.withValues(alpha: 0.4)),
                 ),
                 child: Row(
                   children: [
                     const Icon(
                       Icons.admin_panel_settings,
-                      color: cyan,
+                      color: AppTheme.neonCyan,
                       size: 35,
                     ),
                     const SizedBox(width: 15),
                     const Expanded(
                       child: Text(
                         'Total Admin Accounts',
-                        style: TextStyle(
-                          color: Colors.white70,
-                          fontSize: 13,
-                        ),
+                        style: TextStyle(color: Colors.white70, fontSize: 13),
                       ),
                     ),
                     Text(
                       admins.length.toString(),
                       style: const TextStyle(
-                        color: cyan,
+                        color: AppTheme.neonCyan,
                         fontSize: 28,
                         fontWeight: FontWeight.bold,
                       ),
@@ -358,133 +653,35 @@ class _ManageAdminsScreenState extends State<ManageAdminsScreen> {
               ),
               const SizedBox(height: 25),
               _sectionTitle(
-                'Add New Admin',
-                'Enter the UID of an existing Firebase Authentication user.',
+                'Create New Admin',
+                'Set up a new Admin login with email and password.',
               ),
               const SizedBox(height: 13),
-              TextField(
-                controller: _uidController,
-                style: const TextStyle(color: Colors.white),
-                decoration: InputDecoration(
-                  hintText: 'Enter Firebase Authentication UID',
-                  hintStyle: const TextStyle(color: Colors.white38),
-                  prefixIcon: const Icon(
-                    Icons.fingerprint,
-                    color: cyan,
-                  ),
-                  filled: true,
-                  fillColor: cardColor,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(
-                      color: purple.withValues(alpha: 0.4),
-                    ),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(
-                      color: cyan,
-                      width: 1.5,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 10),
-              SizedBox(
-                width: double.infinity,
-                height: 48,
-                child: ElevatedButton.icon(
-                  onPressed: _isAdding ? null : _addAdmin,
-                  icon: _isAdding
-                      ? const SizedBox(
-                    height: 18,
-                    width: 18,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white,
-                    ),
-                  )
-                      : const Icon(Icons.person_add_alt_1),
-                  label: Text(
-                    _isAdding ? 'Adding...' : 'Add Admin',
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: purple,
-                    foregroundColor: Colors.white,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 10),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: yellow.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: yellow.withValues(alpha: 0.3),
-                  ),
-                ),
-                child: const Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(
-                      Icons.info_outline,
-                      color: yellow,
-                      size: 19,
-                    ),
-                    SizedBox(width: 9),
-                    Expanded(
-                      child: Text(
-                        'This action adds an Admin authorization '
-                            'record in Firestore. It does not create a '
-                            'Firebase Authentication account.',
-                        style: TextStyle(
-                          color: Colors.white70,
-                          fontSize: 11,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 28),
+              _createAdminForm(),
+              const SizedBox(height: 8),
+              _addByUidSection(),
+              const SizedBox(height: 20),
               _sectionTitle(
                 'Existing Admins',
-                'View and manage authorized Admin accounts.',
+                'All Admins have the same permissions.',
               ),
               const SizedBox(height: 13),
               TextField(
                 controller: _searchController,
                 style: const TextStyle(color: Colors.white),
-                decoration: InputDecoration(
-                  hintText: 'Search by Admin UID',
-                  hintStyle: const TextStyle(color: Colors.white38),
-                  prefixIcon: const Icon(
-                    Icons.search,
-                    color: cyan,
-                  ),
-                  suffixIcon: IconButton(
+                decoration: _input(
+                  'Search name, email or UID',
+                  Icons.search,
+                  suffix: IconButton(
                     onPressed: () {
                       _searchController.clear();
                       setState(() => _searchQuery = '');
                     },
-                    icon: const Icon(
-                      Icons.clear,
-                      color: Colors.white70,
-                    ),
-                  ),
-                  filled: true,
-                  fillColor: cardColor,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    icon: const Icon(Icons.clear, color: Colors.white70),
                   ),
                 ),
-                onChanged: (value) {
-                  setState(() => _searchQuery = value.trim());
-                },
+                onChanged: (value) =>
+                    setState(() => _searchQuery = value.trim()),
               ),
               const SizedBox(height: 15),
               Row(
@@ -493,17 +690,14 @@ class _ManageAdminsScreenState extends State<ManageAdminsScreen> {
                   const Text(
                     'Admin Accounts',
                     style: TextStyle(
-                      color: cyan,
+                      color: AppTheme.neonCyan,
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                   Text(
                     '${filteredAdmins.length} found',
-                    style: const TextStyle(
-                      color: Colors.white60,
-                      fontSize: 12,
-                    ),
+                    style: const TextStyle(color: Colors.white60, fontSize: 12),
                   ),
                 ],
               ),
@@ -512,16 +706,12 @@ class _ManageAdminsScreenState extends State<ManageAdminsScreen> {
                 Container(
                   padding: const EdgeInsets.all(25),
                   decoration: BoxDecoration(
-                    color: cardColor,
+                    color: AppTheme.surface,
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: const Column(
                     children: [
-                      Icon(
-                        Icons.person_search,
-                        color: pink,
-                        size: 38,
-                      ),
+                      Icon(Icons.person_search, color: AppTheme.neonPink, size: 38),
                       SizedBox(height: 10),
                       Text(
                         'No Admin accounts found.',
@@ -531,14 +721,9 @@ class _ManageAdminsScreenState extends State<ManageAdminsScreen> {
                   ),
                 )
               else
-                ...filteredAdmins.map((admin) {
-                  final uid = admin.id;
-
-                  return _adminCard(
-                    uid,
-                    uid == currentUid,
-                  );
-                }),
+                ...filteredAdmins.map(
+                  (admin) => _adminCard(admin, admin.uid == currentUid),
+                ),
             ],
           );
         },

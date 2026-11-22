@@ -11,6 +11,7 @@ import 'screen/profiles_screen.dart';
 import 'screen/statistics_screen.dart';
 import 'screen/game_history_screen.dart';
 import 'screen/manage_admins_screen.dart';
+import 'screen/activity_log_screen.dart';
 import 'widgets/admin_drawer.dart';
 import 'theme/app_theme.dart';
 
@@ -87,10 +88,10 @@ class _AdminAppRootState extends State<AdminAppRoot> {
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Scaffold(
-            backgroundColor: Color(0xFF0B0B2B),
+            backgroundColor: AppTheme.background,
             body: Center(
               child: CircularProgressIndicator(
-                color: Color(0xFF00E5FF),
+                color: AppTheme.neonCyan,
               ),
             ),
           );
@@ -135,6 +136,7 @@ class _AdminNavigationShellState extends State<AdminNavigationShell> {
     'Statistics',
     'Game History',
     'Manage Admins',
+    'Activity Log',
   ];
 
   Widget _getSelectedScreen() {
@@ -142,15 +144,17 @@ class _AdminNavigationShellState extends State<AdminNavigationShell> {
       case 0:
         return DashboardScreen(onLogout: widget.onLogout);
       case 1:
-        return UsersScreen();
+        return const UsersScreen();
       case 2:
-        return ProfilesScreen();
+        return const ProfilesScreen();
       case 3:
-        return StatisticsScreen();
+        return const StatisticsScreen();
       case 4:
-        return GameHistoryScreen();
+        return const GameHistoryScreen();
       case 5:
-        return ManageAdminsScreen();
+        return const ManageAdminsScreen();
+      case 6:
+        return const ActivityLogScreen();
       default:
         return DashboardScreen(onLogout: widget.onLogout);
     }
@@ -170,7 +174,7 @@ class _AdminNavigationShellState extends State<AdminNavigationShell> {
 
         if (isDesktop) {
           return Scaffold(
-            backgroundColor: const Color(0xFF0B0B2B),
+            backgroundColor: AppTheme.background,
             body: Row(
               children: [
                 AdminDrawer(
@@ -188,19 +192,19 @@ class _AdminNavigationShellState extends State<AdminNavigationShell> {
         }
 
         return Scaffold(
-          backgroundColor: const Color(0xFF0B0B2B),
+          backgroundColor: AppTheme.background,
           appBar: AppBar(
             title: Text(
               _titles[_selectedIndex],
               style: const TextStyle(
-                color: Color(0xFF00E5FF),
+                color: AppTheme.neonCyan,
                 fontWeight: FontWeight.bold,
                 fontSize: 17,
               ),
             ),
-            backgroundColor: const Color(0xFF171F35),
+            backgroundColor: AppTheme.surface,
             iconTheme: const IconThemeData(
-              color: Color(0xFF00E5FF),
+              color: AppTheme.neonCyan,
             ),
           ),
           drawer: AdminDrawer(
@@ -216,4 +220,4 @@ class _AdminNavigationShellState extends State<AdminNavigationShell> {
       },
     );
   }
-}
+}

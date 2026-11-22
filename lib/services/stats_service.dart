@@ -2,6 +2,31 @@ import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+class OverviewStats {
+  final int totalPlayers;
+  final int blockedPlayers;
+  final int totalGames;
+  final int totalWins;
+  final int totalLosses;
+  final int totalDraws;
+
+  const OverviewStats({
+    required this.totalPlayers,
+    required this.blockedPlayers,
+    required this.totalGames,
+    required this.totalWins,
+    required this.totalLosses,
+    required this.totalDraws,
+  });
+}
+
+class DailyGames {
+  final DateTime day;
+  final int games;
+
+  const DailyGames(this.day, this.games);
+}
+
 class StatsService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
@@ -11,6 +36,9 @@ class StatsService {
   CollectionReference<Map<String, dynamic>> get _gameHistory =>
       _firestore.collection('game_history');
 
+  CollectionReference<Map<String, dynamic>> get _users =>
+      _firestore.collection('users');
+
   int _toInt(dynamic value) {
     if (value is int) return value;
     if (value is num) return value.toInt();
@@ -18,80 +46,92 @@ class StatsService {
     return 0;
   }
 
-  Stream<Map<String, int>> getOverallStats() {
-    late StreamController<Map<String, int>> controller;
+  /// Totals for the dashboard. Uses aggregation queries (count / sum), which
+  /// cost one read per 1000 documents instead of reading every document.
+  Future<OverviewStats> getOverview() async {
+    final results = await Future.wait<Object>([
+      _users.count().get(),
+      _users.where('isBlocked', isEqualTo: true).count().get(),
+      _gameHistory.count().get(),
+      _playerStats
+          .aggregate(sum('wins'), sum('losses'), sum('draws'))
+          .get(),
+    ]);
 
-    StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? statsSub;
-    StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? gamesSub;
+    final players = results[0] as AggregateQuerySnapshot;
+    final blocked = results[1] as AggregateQuerySnapshot;
+    final games = results[2] as AggregateQuerySnapshot;
+    final sums = results[3] as AggregateQuerySnapshot;
 
-    QuerySnapshot<Map<String, dynamic>>? latestStats;
-    QuerySnapshot<Map<String, dynamic>>? latestGames;
-
-    void emitStats() {
-      if (latestStats == null ||
-          latestGames == null ||
-          controller.isClosed) {
-        return;
-      }
-
-      int totalWins = 0;
-      int totalLosses = 0;
-      int totalDraws = 0;
-
-      for (final doc in latestStats!.docs) {
-        final data = doc.data();
-
-        totalWins += _toInt(data['wins']);
-        totalLosses += _toInt(data['losses']);
-        totalDraws += _toInt(data['draws']);
-      }
-
-      controller.add({
-        'totalPlayers': latestStats!.docs.length,
-        'totalGames': latestGames!.docs.length,
-        'totalWins': totalWins,
-        'totalLosses': totalLosses,
-        'totalDraws': totalDraws,
-      });
-    }
-
-    controller = StreamController<Map<String, int>>(
-      onListen: () {
-        statsSub = _playerStats.snapshots().listen(
-              (snapshot) {
-            latestStats = snapshot;
-            emitStats();
-          },
-          onError: (Object error, StackTrace stackTrace) {
-            if (!controller.isClosed) {
-              controller.addError(error, stackTrace);
-            }
-          },
-        );
-
-        gamesSub = _gameHistory.snapshots().listen(
-              (snapshot) {
-            latestGames = snapshot;
-            emitStats();
-          },
-          onError: (Object error, StackTrace stackTrace) {
-            if (!controller.isClosed) {
-              controller.addError(error, stackTrace);
-            }
-          },
-        );
-      },
-      onCancel: () async {
-        await statsSub?.cancel();
-        await gamesSub?.cancel();
-      },
+    return OverviewStats(
+      totalPlayers: players.count ?? 0,
+      blockedPlayers: blocked.count ?? 0,
+      totalGames: games.count ?? 0,
+      totalWins: (sums.getSum('wins') ?? 0).toInt(),
+      totalLosses: (sums.getSum('losses') ?? 0).toInt(),
+      totalDraws: (sums.getSum('draws') ?? 0).toInt(),
     );
-
-    return controller.stream;
   }
 
-  Stream<QuerySnapshot<Map<String, dynamic>>> getPlayerStats() {
-    return _playerStats.snapshots();
+  /// Number of games finished on each of the last [days] days (oldest
+  /// first). Only reads games from that period.
+  Future<List<DailyGames>> getGamesPerDay({int days = 14}) async {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final start = today.subtract(Duration(days: days - 1));
+
+    final snapshot = await _gameHistory
+        .where('completedAt', isGreaterThanOrEqualTo: Timestamp.fromDate(start))
+        .get();
+
+    final counts = <DateTime, int>{
+      for (var i = 0; i < days; i++) start.add(Duration(days: i)): 0,
+    };
+
+    for (final doc in snapshot.docs) {
+      final completed = doc.data()['completedAt'];
+      if (completed is! Timestamp) continue;
+
+      final local = completed.toDate().toLocal();
+      final day = DateTime(local.year, local.month, local.day);
+
+      if (counts.containsKey(day)) {
+        counts[day] = counts[day]! + 1;
+      }
+    }
+
+    return counts.entries.map((e) => DailyGames(e.key, e.value)).toList();
+  }
+
+  /// Players with the most games.
+  Future<List<Map<String, dynamic>>> getMostActivePlayers({
+    int limit = 5,
+  }) async {
+    final snapshot = await _playerStats
+        .orderBy('gamesPlayed', descending: true)
+        .limit(limit)
+        .get();
+
+    return snapshot.docs.map((doc) {
+      final data = doc.data();
+      return {
+        'uid': doc.id,
+        'email': data['email']?.toString() ?? doc.id,
+        'gamesPlayed': _toInt(data['gamesPlayed']),
+        'wins': _toInt(data['wins']),
+      };
+    }).toList();
+  }
+
+  /// Player stats sorted by [field] (gamesPlayed or wins), at most [limit].
+  Stream<QuerySnapshot<Map<String, dynamic>>> getPlayerStats({
+    required String field,
+    required int limit,
+  }) {
+    return _playerStats
+        .orderBy(field, descending: true)
+        .limit(limit)
+        .snapshots();
   }
 
   Future<Map<String, dynamic>?> getPlayerStatsById(String uid) async {

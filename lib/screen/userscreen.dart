@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../models/user_model.dart';
 import '../services/user_service.dart';
+import '../widgets/load_more_button.dart';
+import '../theme/app_theme.dart';
 
 class UsersScreen extends StatefulWidget {
   const UsersScreen({super.key});
@@ -16,17 +18,34 @@ class _UsersScreenState extends State<UsersScreen> {
 
   String _search = '';
 
-  static const Color background = Color(0xFF0B0B2B);
-  static const Color surface = Color(0xFF171F35);
-  static const Color purple = Color(0xFF7B2FF7);
-  static const Color cyan = Color(0xFF00E5FF);
-  static const Color pink = Color(0xFFFF2BD6);
-  static const Color yellow = Color(0xFFFFD600);
+  static const int _pageSize = 25;
+  int _limit = _pageSize;
+  late Stream<List<UserModel>> _usersStream;
+  late Future<UserCounts> _countsFuture;
+
+
+  @override
+  void initState() {
+    super.initState();
+    _usersStream = _service.getUsers(limit: _limit);
+    _countsFuture = _service.getCounts();
+  }
 
   @override
   void dispose() {
     _searchController.dispose();
     super.dispose();
+  }
+
+  void _loadMore() {
+    setState(() {
+      _limit += _pageSize;
+      _usersStream = _service.getUsers(limit: _limit);
+    });
+  }
+
+  void _refreshCounts() {
+    setState(() => _countsFuture = _service.getCounts());
   }
 
   void _message(String message) {
@@ -36,92 +55,46 @@ class _UsersScreenState extends State<UsersScreen> {
     );
   }
 
-  Future<void> _showUserForm({UserModel? user}) async {
-    final isEditing = user != null;
+  Future<void> _editPlayer(UserModel user) async {
     final formKey = GlobalKey<FormState>();
-
-    final uidController = TextEditingController(text: user?.uid ?? '');
-    final nameController = TextEditingController(text: user?.name ?? '');
-    final emailController = TextEditingController(text: user?.email ?? '');
-    final phoneController = TextEditingController(text: user?.phone ?? '');
+    final nameController = TextEditingController(text: user.name);
 
     final save = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        backgroundColor: surface,
-        title: Text(
-          isEditing ? 'Edit Player' : 'Add Player Profile',
-          style: const TextStyle(
-            color: cyan,
-            fontWeight: FontWeight.bold,
-          ),
+        backgroundColor: AppTheme.surface,
+        title: const Text(
+          'Edit Player',
+          style: TextStyle(color: AppTheme.neonCyan, fontWeight: FontWeight.bold),
         ),
         content: Form(
           key: formKey,
           child: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (!isEditing) ...[
-                  TextFormField(
-                    controller: uidController,
-                    style: const TextStyle(color: Colors.white),
-                    decoration: const InputDecoration(
-                      labelText: 'Firebase User UID',
-                      hintText: 'Enter existing Auth UID',
-                    ),
-                    validator: (value) =>
-                    value == null || value.trim().isEmpty
-                        ? 'UID is required'
-                        : null,
-                  ),
-                  const SizedBox(height: 12),
-                ],
                 TextFormField(
                   controller: nameController,
                   style: const TextStyle(color: Colors.white),
-                  decoration: const InputDecoration(
-                    labelText: 'Full Name',
-                  ),
-                  validator: (value) =>
-                  value == null || value.trim().isEmpty
+                  decoration: const InputDecoration(labelText: 'Display Name'),
+                  validator: (value) => value == null || value.trim().isEmpty
                       ? 'Name is required'
                       : null,
                 ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: emailController,
-                  keyboardType: TextInputType.emailAddress,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: const InputDecoration(
-                    labelText: 'Email Address',
-                  ),
-                  validator: (value) {
-                    if (value == null || value.trim().isEmpty) {
-                      return 'Email is required';
-                    }
-                    if (!value.contains('@') || !value.contains('.')) {
-                      return 'Enter a valid email';
-                    }
-                    return null;
-                  },
+                const SizedBox(height: 16),
+                _detail('Email (login)', user.email),
+                _detail(
+                  'Phone',
+                  user.phone.isEmpty ? 'Not provided' : user.phone,
                 ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: phoneController,
-                  keyboardType: TextInputType.phone,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: const InputDecoration(
-                    labelText: 'Phone Number',
-                  ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Email and phone are tied to the player\'s login and '
+                  'offline profile, so they can only be changed by the '
+                  'player.',
+                  style: TextStyle(color: Colors.white60, fontSize: 12),
                 ),
-                if (!isEditing) ...[
-                  const SizedBox(height: 12),
-                  const Text(
-                    'This creates a Firestore profile only. It does not create a Firebase Authentication account.',
-                    style: TextStyle(color: Colors.white60, fontSize: 12),
-                  ),
-                ],
               ],
             ),
           ),
@@ -137,7 +110,7 @@ class _UsersScreenState extends State<UsersScreen> {
                 Navigator.pop(dialogContext, true);
               }
             },
-            child: Text(isEditing ? 'SAVE CHANGES' : 'ADD PROFILE'),
+            child: const Text('SAVE CHANGES'),
           ),
         ],
       ),
@@ -145,49 +118,38 @@ class _UsersScreenState extends State<UsersScreen> {
 
     if (save == true) {
       try {
-        if (isEditing) {
-          await _service.updateUser(
-            uid: user.uid,
-            name: nameController.text,
-            email: emailController.text,
-            phone: phoneController.text,
-          );
-          _message('Player profile updated successfully.');
-        } else {
-          await _service.addUser(
-            uid: uidController.text,
-            name: nameController.text,
-            email: emailController.text,
-            phone: phoneController.text,
-          );
-          _message('Player profile added successfully.');
-        }
+        await _service.updateUserName(
+          uid: user.uid,
+          name: nameController.text,
+          oldName: user.name,
+        );
+        _message('Player name updated.');
       } catch (e) {
-        _message('Operation failed: $e');
+        _message('Update failed: $e');
       }
     }
 
-    uidController.dispose();
     nameController.dispose();
-    emailController.dispose();
-    phoneController.dispose();
   }
 
   Future<void> _toggleBlock(UserModel user) async {
     final block = !user.isBlocked;
+    final name = user.name.isEmpty ? user.email : user.name;
 
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        backgroundColor: surface,
+        backgroundColor: AppTheme.surface,
         title: Text(
           block ? 'Block Player?' : 'Unblock Player?',
-          style: const TextStyle(color: cyan),
+          style: const TextStyle(color: AppTheme.neonCyan),
         ),
         content: Text(
           block
-              ? 'Mark ${user.name} as blocked?'
-              : 'Mark ${user.name} as active?',
+              ? '$name will be signed out the next time they open the game '
+                  'online, and cannot log in or save game results until '
+                  'unblocked.'
+              : '$name will be able to log in and play again.',
           style: const TextStyle(color: Colors.white70),
         ),
         actions: [
@@ -206,25 +168,29 @@ class _UsersScreenState extends State<UsersScreen> {
     if (confirmed != true) return;
 
     try {
-      await _service.setUserBlocked(uid: user.uid, blocked: block);
-      _message(block ? 'Player marked as blocked.' : 'Player marked as active.');
+      await _service.setUserBlocked(
+        uid: user.uid,
+        blocked: block,
+        name: name,
+      );
+      _message(block ? 'Player blocked.' : 'Player unblocked.');
+      _refreshCounts();
     } catch (e) {
       _message('Status update failed: $e');
     }
   }
 
-  Future<void> _deleteUser(UserModel user) async {
+  Future<void> _sendPasswordReset(UserModel user) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        backgroundColor: surface,
+        backgroundColor: AppTheme.surface,
         title: const Text(
-          'Delete Player Record?',
-          style: TextStyle(color: pink),
+          'Send Password Reset?',
+          style: TextStyle(color: AppTheme.neonCyan),
         ),
         content: Text(
-          'This deletes only the Firestore profile for ${user.name}. '
-              'The Firebase Authentication account will remain.',
+          'A password reset link will be emailed to ${user.email}.',
           style: const TextStyle(color: Colors.white70),
         ),
         actions: [
@@ -232,12 +198,9 @@ class _UsersScreenState extends State<UsersScreen> {
             onPressed: () => Navigator.pop(dialogContext, false),
             child: const Text('CANCEL'),
           ),
-          TextButton(
+          ElevatedButton(
             onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text(
-              'DELETE',
-              style: TextStyle(color: pink),
-            ),
+            child: const Text('SEND'),
           ),
         ],
       ),
@@ -246,8 +209,92 @@ class _UsersScreenState extends State<UsersScreen> {
     if (confirmed != true) return;
 
     try {
-      await _service.deleteUserRecord(user.uid);
-      _message('Firestore profile deleted.');
+      await _service.sendPasswordReset(user.email, name: user.name);
+      _message('Password reset email sent to ${user.email}.');
+    } catch (e) {
+      _message('Could not send reset email: $e');
+    }
+  }
+
+  Future<void> _deleteUser(UserModel user) async {
+    var deleteHistory = true;
+    final name = user.name.isEmpty ? user.email : user.name;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          backgroundColor: AppTheme.surface,
+          title: const Text(
+            'Delete Player?',
+            style: TextStyle(color: AppTheme.neonPink),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'This permanently deletes $name\'s profile, statistics and '
+                'bio. It cannot be undone, and they will no longer be able '
+                'to log in to the game.',
+                style: const TextStyle(color: Colors.white70),
+              ),
+              const SizedBox(height: 8),
+              CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                value: deleteHistory,
+                activeColor: AppTheme.neonPink,
+                onChanged: (v) =>
+                    setDialogState(() => deleteHistory = v ?? true),
+                title: const Text(
+                  'Also delete their game history',
+                  style: TextStyle(color: Colors.white),
+                ),
+                subtitle: const Text(
+                  'Untick to keep past games in Statistics and Game History.',
+                  style: TextStyle(color: Colors.white54, fontSize: 11),
+                ),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'To also remove the login itself, delete it in Firebase '
+                'console > Authentication (UID shown in the profile).',
+                style: TextStyle(color: Colors.white38, fontSize: 11),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('CANCEL'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text(
+                'DELETE',
+                style: TextStyle(color: AppTheme.neonPink),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      final games = await _service.deletePlayer(
+        uid: user.uid,
+        email: user.email,
+        name: user.name,
+        deleteGameHistory: deleteHistory,
+      );
+      _refreshCounts();
+      _message(
+        deleteHistory
+            ? 'Player deleted, including $games game records.'
+            : 'Player deleted. Game history kept.',
+      );
     } catch (e) {
       _message('Delete failed: $e');
     }
@@ -257,10 +304,10 @@ class _UsersScreenState extends State<UsersScreen> {
     showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        backgroundColor: surface,
+        backgroundColor: AppTheme.surface,
         title: const Text(
           'Player Profile',
-          style: TextStyle(color: cyan),
+          style: TextStyle(color: AppTheme.neonCyan),
         ),
         content: SingleChildScrollView(
           child: Column(
@@ -305,7 +352,7 @@ class _UsersScreenState extends State<UsersScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: const TextStyle(color: cyan, fontSize: 12)),
+          Text(label, style: const TextStyle(color: AppTheme.neonCyan, fontSize: 12)),
           SelectableText(
             value,
             style: const TextStyle(color: Colors.white70),
@@ -320,7 +367,7 @@ class _UsersScreenState extends State<UsersScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 5),
         decoration: BoxDecoration(
-          color: surface,
+          color: AppTheme.surface,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: color.withValues(alpha: 0.4)),
         ),
@@ -349,12 +396,12 @@ class _UsersScreenState extends State<UsersScreen> {
     final blocked = user.isBlocked;
 
     return Card(
-      color: surface,
+      color: AppTheme.surface,
       margin: const EdgeInsets.only(bottom: 12),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
         side: BorderSide(
-          color: blocked ? pink : purple.withValues(alpha: 0.5),
+          color: blocked ? AppTheme.neonPink : AppTheme.purple.withValues(alpha: 0.5),
         ),
       ),
       child: Padding(
@@ -364,8 +411,8 @@ class _UsersScreenState extends State<UsersScreen> {
             Row(
               children: [
                 CircleAvatar(
-                  backgroundColor: blocked ? pink : cyan,
-                  child: const Icon(Icons.person, color: background),
+                  backgroundColor: blocked ? AppTheme.neonPink : AppTheme.neonCyan,
+                  child: const Icon(Icons.person, color: AppTheme.background),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -392,7 +439,7 @@ class _UsersScreenState extends State<UsersScreen> {
                 Text(
                   blocked ? 'BLOCKED' : 'ACTIVE',
                   style: TextStyle(
-                    color: blocked ? pink : cyan,
+                    color: blocked ? AppTheme.neonPink : AppTheme.neonCyan,
                     fontWeight: FontWeight.bold,
                     fontSize: 11,
                   ),
@@ -406,10 +453,10 @@ class _UsersScreenState extends State<UsersScreen> {
                 Text('Games: ${user.gamesPlayed}',
                     style: const TextStyle(color: Colors.white70, fontSize: 12)),
                 Text('Wins: ${user.wins}',
-                    style: const TextStyle(color: cyan, fontSize: 12)),
+                    style: const TextStyle(color: AppTheme.neonCyan, fontSize: 12)),
                 Text(
                   'Win rate: ${user.winRate.toStringAsFixed(1)}%',
-                  style: const TextStyle(color: yellow, fontSize: 12),
+                  style: const TextStyle(color: AppTheme.neonYellow, fontSize: 12),
                 ),
               ],
             ),
@@ -420,25 +467,30 @@ class _UsersScreenState extends State<UsersScreen> {
                 IconButton(
                   tooltip: 'View Profile',
                   onPressed: () => _showDetails(user),
-                  icon: const Icon(Icons.visibility_outlined, color: cyan),
+                  icon: const Icon(Icons.visibility_outlined, color: AppTheme.neonCyan),
                 ),
                 IconButton(
                   tooltip: 'Edit Player',
-                  onPressed: () => _showUserForm(user: user),
-                  icon: const Icon(Icons.edit_outlined, color: yellow),
+                  onPressed: () => _editPlayer(user),
+                  icon: const Icon(Icons.edit_outlined, color: AppTheme.neonYellow),
+                ),
+                IconButton(
+                  tooltip: 'Send Password Reset Email',
+                  onPressed: () => _sendPasswordReset(user),
+                  icon: const Icon(Icons.lock_reset, color: Colors.white70),
                 ),
                 IconButton(
                   tooltip: blocked ? 'Unblock Player' : 'Block Player',
                   onPressed: () => _toggleBlock(user),
                   icon: Icon(
                     blocked ? Icons.lock_open : Icons.block,
-                    color: blocked ? cyan : pink,
+                    color: blocked ? AppTheme.neonCyan : AppTheme.neonPink,
                   ),
                 ),
                 IconButton(
-                  tooltip: 'Delete Firestore Record',
+                  tooltip: 'Delete Player',
                   onPressed: () => _deleteUser(user),
-                  icon: const Icon(Icons.delete_outline, color: pink),
+                  icon: const Icon(Icons.delete_outline, color: AppTheme.neonPink),
                 ),
               ],
             ),
@@ -451,37 +503,23 @@ class _UsersScreenState extends State<UsersScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: background,
+      backgroundColor: AppTheme.background,
       appBar: AppBar(
-        backgroundColor: surface,
-        foregroundColor: cyan,
+        backgroundColor: AppTheme.surface,
+        foregroundColor: AppTheme.neonCyan,
         title: const Text(
           'USER MANAGEMENT',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
-        actions: [
-          IconButton(
-            tooltip: 'Add Player Profile',
-            onPressed: () => _showUserForm(),
-            icon: const Icon(Icons.person_add_alt_1),
-          ),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        backgroundColor: purple,
-        foregroundColor: Colors.white,
-        onPressed: () => _showUserForm(),
-        icon: const Icon(Icons.add),
-        label: const Text('ADD PLAYER'),
       ),
       body: StreamBuilder<List<UserModel>>(
-        stream: _service.getUsers(),
+        stream: _usersStream,
         builder: (context, snapshot) {
           if (snapshot.hasError) {
             return const Center(
               child: Text(
                 'Unable to load players. Check Firestore permissions.',
-                style: TextStyle(color: pink),
+                style: TextStyle(color: AppTheme.neonPink),
                 textAlign: TextAlign.center,
               ),
             );
@@ -489,7 +527,7 @@ class _UsersScreenState extends State<UsersScreen> {
 
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(
-              child: CircularProgressIndicator(color: cyan),
+              child: CircularProgressIndicator(color: AppTheme.neonCyan),
             );
           }
 
@@ -503,8 +541,7 @@ class _UsersScreenState extends State<UsersScreen> {
                 user.phone.toLowerCase().contains(query);
           }).toList();
 
-          final active = allUsers.where((u) => !u.isBlocked).length;
-          final blocked = allUsers.where((u) => u.isBlocked).length;
+          final canLoadMore = allUsers.length >= _limit;
 
           return Column(
             children: [
@@ -512,14 +549,20 @@ class _UsersScreenState extends State<UsersScreen> {
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   children: [
-                    Row(
-                      children: [
-                        _stat('TOTAL', allUsers.length, cyan),
-                        const SizedBox(width: 8),
-                        _stat('ACTIVE', active, yellow),
-                        const SizedBox(width: 8),
-                        _stat('BLOCKED', blocked, pink),
-                      ],
+                    FutureBuilder<UserCounts>(
+                      future: _countsFuture,
+                      builder: (context, countSnapshot) {
+                        final counts = countSnapshot.data;
+                        return Row(
+                          children: [
+                            _stat('TOTAL', counts?.total ?? 0, AppTheme.neonCyan),
+                            const SizedBox(width: 8),
+                            _stat('ACTIVE', counts?.active ?? 0, AppTheme.neonYellow),
+                            const SizedBox(width: 8),
+                            _stat('BLOCKED', counts?.blocked ?? 0, AppTheme.neonPink),
+                          ],
+                        );
+                      },
                     ),
                     const SizedBox(height: 14),
                     TextField(
@@ -527,8 +570,8 @@ class _UsersScreenState extends State<UsersScreen> {
                       onChanged: (value) => setState(() => _search = value),
                       style: const TextStyle(color: Colors.white),
                       decoration: InputDecoration(
-                        hintText: 'Search name, email, phone or UID',
-                        prefixIcon: const Icon(Icons.search, color: cyan),
+                        hintText: 'Search loaded players: name, email, phone',
+                        prefixIcon: const Icon(Icons.search, color: AppTheme.neonCyan),
                         suffixIcon: IconButton(
                           onPressed: () {
                             _searchController.clear();
@@ -537,7 +580,7 @@ class _UsersScreenState extends State<UsersScreen> {
                           icon: const Icon(Icons.clear, color: Colors.white54),
                         ),
                         filled: true,
-                        fillColor: surface,
+                        fillColor: AppTheme.surface,
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
@@ -547,7 +590,7 @@ class _UsersScreenState extends State<UsersScreen> {
                 ),
               ),
               Expanded(
-                child: users.isEmpty
+                child: users.isEmpty && !canLoadMore
                     ? Center(
                   child: Text(
                     allUsers.isEmpty
@@ -557,10 +600,20 @@ class _UsersScreenState extends State<UsersScreen> {
                   ),
                 )
                     : ListView.builder(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 90),
-                  itemCount: users.length,
-                  itemBuilder: (context, index) =>
-                      _playerCard(users[index]),
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                  itemCount: users.length + (canLoadMore ? 1 : 0),
+                  itemBuilder: (context, index) {
+                    if (index == users.length) {
+                      return LoadMoreButton(
+                        shown: allUsers.length,
+                        onPressed: _loadMore,
+                        hint: query.isEmpty
+                            ? null
+                            : 'Search only covers loaded players.',
+                      );
+                    }
+                    return _playerCard(users[index]);
+                  },
                 ),
               ),
             ],
@@ -569,4 +622,4 @@ class _UsersScreenState extends State<UsersScreen> {
       ),
     );
   }
-}
+}

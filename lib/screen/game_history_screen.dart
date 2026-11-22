@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../models/game_model.dart';
 import '../services/game_service.dart';
+import '../widgets/load_more_button.dart';
+import '../theme/app_theme.dart';
 
 class GameHistoryScreen extends StatefulWidget {
   const GameHistoryScreen({super.key});
@@ -18,17 +20,30 @@ class _GameHistoryScreenState extends State<GameHistoryScreen> {
   String _selectedDifficulty = 'All';
   String _searchQuery = '';
 
-  static const Color background = Color(0xFF0B0B2B);
-  static const Color purple = Color(0xFF7B2FF7);
-  static const Color cyan = Color(0xFF00E5FF);
-  static const Color pink = Color(0xFFFF2BD6);
-  static const Color yellow = Color(0xFFFFD600);
-  static const Color cardColor = Color(0xFF171F35);
+  static const int _pageSize = 30;
+  int _limit = _pageSize;
+  late Stream<List<GameModel>> _gamesStream;
+  late Future<Map<String, int>> _countsFuture;
+
+
+  @override
+  void initState() {
+    super.initState();
+    _gamesStream = _gameService.getGames(limit: _limit);
+    _countsFuture = _gameService.getResultCounts();
+  }
 
   @override
   void dispose() {
     _searchController.dispose();
     super.dispose();
+  }
+
+  void _loadMore() {
+    setState(() {
+      _limit += _pageSize;
+      _gamesStream = _gameService.getGames(limit: _limit);
+    });
   }
 
   Color _resultColor(String result) {
@@ -38,7 +53,7 @@ class _GameHistoryScreenState extends State<GameHistoryScreen> {
       case 'LOSS':
         return Colors.redAccent;
       case 'DRAW':
-        return yellow;
+        return AppTheme.neonYellow;
       default:
         return Colors.white70;
     }
@@ -88,7 +103,7 @@ class _GameHistoryScreenState extends State<GameHistoryScreen> {
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: cardColor,
+          color: AppTheme.surface,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(color: color.withValues(alpha: 0.5)),
         ),
@@ -137,7 +152,7 @@ class _GameHistoryScreenState extends State<GameHistoryScreen> {
         const Text(
           'Filter by Result',
           style: TextStyle(
-            color: cyan,
+            color: AppTheme.neonCyan,
             fontWeight: FontWeight.bold,
           ),
         ),
@@ -150,8 +165,8 @@ class _GameHistoryScreenState extends State<GameHistoryScreen> {
             return ChoiceChip(
               label: Text(result),
               selected: selected,
-              selectedColor: purple,
-              backgroundColor: cardColor,
+              selectedColor: AppTheme.purple,
+              backgroundColor: AppTheme.surface,
               labelStyle: TextStyle(
                 color: selected ? Colors.white : Colors.white70,
               ),
@@ -167,16 +182,16 @@ class _GameHistoryScreenState extends State<GameHistoryScreen> {
         const Text(
           'Filter by Difficulty',
           style: TextStyle(
-            color: cyan,
+            color: AppTheme.neonCyan,
             fontWeight: FontWeight.bold,
           ),
         ),
         const SizedBox(height: 8),
         DropdownButtonFormField<String>(
           value: validDifficulty,
-          dropdownColor: cardColor,
+          dropdownColor: AppTheme.surface,
           decoration: const InputDecoration(
-            prefixIcon: Icon(Icons.speed, color: cyan),
+            prefixIcon: Icon(Icons.speed, color: AppTheme.neonCyan),
             border: OutlineInputBorder(),
           ),
           style: const TextStyle(color: Colors.white),
@@ -209,17 +224,17 @@ class _GameHistoryScreenState extends State<GameHistoryScreen> {
     final color = _resultColor(result);
 
     return Card(
-      color: cardColor,
+      color: AppTheme.surface,
       margin: const EdgeInsets.only(bottom: 14),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(15),
         side: BorderSide(
-          color: purple.withValues(alpha: 0.4),
+          color: AppTheme.purple.withValues(alpha: 0.4),
         ),
       ),
       child: ExpansionTile(
-        iconColor: cyan,
-        collapsedIconColor: cyan,
+        iconColor: AppTheme.neonCyan,
+        collapsedIconColor: AppTheme.neonCyan,
         tilePadding: const EdgeInsets.symmetric(
           horizontal: 16,
           vertical: 5,
@@ -227,7 +242,7 @@ class _GameHistoryScreenState extends State<GameHistoryScreen> {
         childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
         leading: const Icon(
           Icons.sports_esports,
-          color: cyan,
+          color: AppTheme.neonCyan,
           size: 28,
         ),
         title: Text(
@@ -295,7 +310,7 @@ class _GameHistoryScreenState extends State<GameHistoryScreen> {
             child: Text(
               label,
               style: const TextStyle(
-                color: cyan,
+                color: AppTheme.neonCyan,
                 fontSize: 12,
               ),
             ),
@@ -317,17 +332,17 @@ class _GameHistoryScreenState extends State<GameHistoryScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: background,
+      backgroundColor: AppTheme.background,
       appBar: AppBar(
-        backgroundColor: background,
-        foregroundColor: cyan,
+        backgroundColor: AppTheme.background,
+        foregroundColor: AppTheme.neonCyan,
         title: const Text(
           'Game Management',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
       ),
       body: StreamBuilder<List<GameModel>>(
-        stream: _gameService.getGames(),
+        stream: _gamesStream,
         builder: (context, snapshot) {
           if (snapshot.hasError) {
             return const Center(
@@ -340,23 +355,12 @@ class _GameHistoryScreenState extends State<GameHistoryScreen> {
 
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(
-              child: CircularProgressIndicator(color: cyan),
+              child: CircularProgressIndicator(color: AppTheme.neonCyan),
             );
           }
 
           final games = snapshot.data ?? [];
-
-          final totalWins = games.where(
-                (game) => game.result.toUpperCase() == 'WIN',
-          ).length;
-
-          final totalLosses = games.where(
-                (game) => game.result.toUpperCase() == 'LOSS',
-          ).length;
-
-          final totalDraws = games.where(
-                (game) => game.result.toUpperCase() == 'DRAW',
-          ).length;
+          final canLoadMore = games.length >= _limit;
 
           final filteredGames = _filterGames(games);
 
@@ -378,40 +382,50 @@ class _GameHistoryScreenState extends State<GameHistoryScreen> {
               ),
               const SizedBox(height: 18),
 
-              Row(
-                children: [
-                  _summaryCard(
-                    'Total Games',
-                    games.length,
-                    cyan,
-                    Icons.sports_esports,
-                  ),
-                  const SizedBox(width: 8),
-                  _summaryCard(
-                    'Wins',
-                    totalWins,
-                    Colors.greenAccent,
-                    Icons.emoji_events,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  _summaryCard(
-                    'Losses',
-                    totalLosses,
-                    Colors.redAccent,
-                    Icons.trending_down,
-                  ),
-                  const SizedBox(width: 8),
-                  _summaryCard(
-                    'Draws',
-                    totalDraws,
-                    yellow,
-                    Icons.handshake,
-                  ),
-                ],
+              FutureBuilder<Map<String, int>>(
+                future: _countsFuture,
+                builder: (context, countSnapshot) {
+                  final counts = countSnapshot.data ?? const {};
+                  return Column(
+                    children: [
+                      Row(
+                        children: [
+                          _summaryCard(
+                            'Total Games',
+                            counts['total'] ?? 0,
+                            AppTheme.neonCyan,
+                            Icons.sports_esports,
+                          ),
+                          const SizedBox(width: 8),
+                          _summaryCard(
+                            'Wins',
+                            counts['win'] ?? 0,
+                            Colors.greenAccent,
+                            Icons.emoji_events,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          _summaryCard(
+                            'Losses',
+                            counts['loss'] ?? 0,
+                            Colors.redAccent,
+                            Icons.trending_down,
+                          ),
+                          const SizedBox(width: 8),
+                          _summaryCard(
+                            'Draws',
+                            counts['draw'] ?? 0,
+                            AppTheme.neonYellow,
+                            Icons.handshake,
+                          ),
+                        ],
+                      ),
+                    ],
+                  );
+                },
               ),
 
               const SizedBox(height: 22),
@@ -420,8 +434,8 @@ class _GameHistoryScreenState extends State<GameHistoryScreen> {
                 controller: _searchController,
                 style: const TextStyle(color: Colors.white),
                 decoration: InputDecoration(
-                  hintText: 'Search email, UID, opponent or Game ID',
-                  prefixIcon: const Icon(Icons.search, color: cyan),
+                  hintText: 'Search loaded games: email, UID, opponent, ID',
+                  prefixIcon: const Icon(Icons.search, color: AppTheme.neonCyan),
                   suffixIcon: IconButton(
                     icon: const Icon(Icons.clear, color: Colors.white70),
                     onPressed: () {
@@ -432,7 +446,7 @@ class _GameHistoryScreenState extends State<GameHistoryScreen> {
                     },
                   ),
                   filled: true,
-                  fillColor: cardColor,
+                  fillColor: AppTheme.surface,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
@@ -456,7 +470,7 @@ class _GameHistoryScreenState extends State<GameHistoryScreen> {
                   const Text(
                     'Game Records',
                     style: TextStyle(
-                      color: cyan,
+                      color: AppTheme.neonCyan,
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
                     ),
@@ -474,14 +488,14 @@ class _GameHistoryScreenState extends State<GameHistoryScreen> {
                 Container(
                   padding: const EdgeInsets.all(25),
                   decoration: BoxDecoration(
-                    color: cardColor,
+                    color: AppTheme.surface,
                     borderRadius: BorderRadius.circular(14),
                   ),
                   child: const Column(
                     children: [
                       Icon(
                         Icons.search_off,
-                        color: pink,
+                        color: AppTheme.neonPink,
                         size: 40,
                       ),
                       SizedBox(height: 10),
@@ -495,10 +509,16 @@ class _GameHistoryScreenState extends State<GameHistoryScreen> {
                 )
               else
                 ...filteredGames.map(_gameCard),
+              if (canLoadMore)
+                LoadMoreButton(
+                  shown: games.length,
+                  onPressed: _loadMore,
+                  hint: 'Search and filters only cover loaded games.',
+                ),
             ],
           );
         },
       ),
     );
   }
-}
+}

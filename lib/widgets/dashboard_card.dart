@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../theme/app_theme.dart';
+
 class DashboardCard extends StatelessWidget {
   final String title;
   final int value;
@@ -19,7 +21,7 @@ class DashboardCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFF171F35),
+        color: AppTheme.surface,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: color.withValues(alpha: 0.5),
@@ -51,4 +53,4 @@ class DashboardCard extends StatelessWidget {
       ),
     );
   }
-}
+}

@@ -1,15 +1,46 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
-class ProfilesScreen extends StatelessWidget {
-  ProfilesScreen({super.key});
+import '../services/admin_log_service.dart';
+import '../widgets/load_more_button.dart';
+import '../theme/app_theme.dart';
 
+class ProfilesScreen extends StatefulWidget {
+  const ProfilesScreen({super.key});
+
+  @override
+  State<ProfilesScreen> createState() => _ProfilesScreenState();
+}
+
+class _ProfilesScreenState extends State<ProfilesScreen> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  static const Color background = Color(0xFF0B1020);
-  static const Color cardColor = Color(0xFF171F35);
-  static const Color cyan = Colors.cyanAccent;
-  static const Color purple = Color(0xFF7B2FF7);
+  static const int _pageSize = 25;
+  int _limit = _pageSize;
+  late Stream<QuerySnapshot<Map<String, dynamic>>> _profilesStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _profilesStream = _query();
+  }
+
+  // Most recently updated bios first, only as many as are shown.
+  Stream<QuerySnapshot<Map<String, dynamic>>> _query() {
+    return _firestore
+        .collection('user_profiles')
+        .orderBy('updatedAt', descending: true)
+        .limit(_limit)
+        .snapshots();
+  }
+
+  void _loadMore() {
+    setState(() {
+      _limit += _pageSize;
+      _profilesStream = _query();
+    });
+  }
+
 
   String _formatDate(dynamic value) {
     if (value is Timestamp) {
@@ -26,14 +57,14 @@ class ProfilesScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: background,
+      backgroundColor: AppTheme.background,
       appBar: AppBar(
         title: const Text('Player Profiles'),
-        backgroundColor: cardColor,
-        foregroundColor: cyan,
+        backgroundColor: AppTheme.surface,
+        foregroundColor: AppTheme.neonCyan,
       ),
       body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-        stream: _firestore.collection('user_profiles').snapshots(),
+        stream: _profilesStream,
         builder: (context, snapshot) {
           if (snapshot.hasError) {
             return const Center(
@@ -46,11 +77,12 @@ class ProfilesScreen extends StatelessWidget {
 
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(
-              child: CircularProgressIndicator(color: cyan),
+              child: CircularProgressIndicator(color: AppTheme.neonCyan),
             );
           }
 
           final profiles = snapshot.data?.docs ?? [];
+          final canLoadMore = profiles.length >= _limit;
 
           if (profiles.isEmpty) {
             return const Center(
@@ -63,8 +95,15 @@ class ProfilesScreen extends StatelessWidget {
 
           return ListView.builder(
             padding: const EdgeInsets.all(12),
-            itemCount: profiles.length,
+            itemCount: profiles.length + (canLoadMore ? 1 : 0),
             itemBuilder: (context, index) {
+              if (index == profiles.length) {
+                return LoadMoreButton(
+                  shown: profiles.length,
+                  onPressed: _loadMore,
+                );
+              }
+
               final document = profiles[index];
               final profile = document.data();
 
@@ -109,9 +148,6 @@ class _ProfileCard extends StatefulWidget {
 }
 
 class _ProfileCardState extends State<_ProfileCard> {
-  static const Color cyan = Colors.cyanAccent;
-  static const Color cardColor = Color(0xFF171F35);
-  static const Color purple = Color(0xFF7B2FF7);
 
   late final TextEditingController _bioController;
 
@@ -161,7 +197,7 @@ class _ProfileCardState extends State<_ProfileCard> {
           Text(
             title,
             style: const TextStyle(
-              color: cyan,
+              color: AppTheme.neonCyan,
               fontSize: 12,
             ),
           ),
@@ -189,6 +225,12 @@ class _ProfileCardState extends State<_ProfileCard> {
         'bio': newBio,
         'updatedAt': FieldValue.serverTimestamp(),
       });
+
+      await AdminLogService().log(
+        AdminAction.bioEdited,
+        targetUid: widget.uid,
+        details: 'New bio: "$newBio"',
+      );
 
       if (!mounted) return;
 
@@ -222,6 +264,11 @@ class _ProfileCardState extends State<_ProfileCard> {
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
+      await AdminLogService().log(
+        AdminAction.bioDeleted,
+        targetUid: widget.uid,
+      );
+
       if (!mounted) return;
 
       _bioController.clear();
@@ -250,7 +297,7 @@ class _ProfileCardState extends State<_ProfileCard> {
         children: [
           const Text(
             'Edit Bio',
-            style: TextStyle(color: cyan, fontSize: 12),
+            style: TextStyle(color: AppTheme.neonCyan, fontSize: 12),
           ),
           const SizedBox(height: 8),
           TextField(
@@ -262,10 +309,10 @@ class _ProfileCardState extends State<_ProfileCard> {
               hintText: 'Enter player bio',
               hintStyle: TextStyle(color: Colors.white54),
               enabledBorder: OutlineInputBorder(
-                borderSide: BorderSide(color: cyan),
+                borderSide: BorderSide(color: AppTheme.neonCyan),
               ),
               focusedBorder: OutlineInputBorder(
-                borderSide: BorderSide(color: purple),
+                borderSide: BorderSide(color: AppTheme.purple),
               ),
             ),
           ),
@@ -359,8 +406,8 @@ class _ProfileCardState extends State<_ProfileCard> {
                 icon: const Icon(Icons.edit, size: 18),
                 label: const Text('Edit Bio'),
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: cyan,
-                  side: const BorderSide(color: cyan),
+                  foregroundColor: AppTheme.neonCyan,
+                  side: const BorderSide(color: AppTheme.neonCyan),
                 ),
               ),
             ),
@@ -405,7 +452,7 @@ class _ProfileCardState extends State<_ProfileCard> {
             userData?['updatedAt'] ?? widget.profile['updatedAt'];
 
         return Card(
-          color: cardColor,
+          color: AppTheme.surface,
           margin: const EdgeInsets.only(bottom: 12),
           child: Padding(
             padding: const EdgeInsets.all(16),
@@ -416,7 +463,7 @@ class _ProfileCardState extends State<_ProfileCard> {
                   children: [
                     Icon(
                       Icons.account_circle,
-                      color: cyan,
+                      color: AppTheme.neonCyan,
                       size: 30,
                     ),
                     SizedBox(width: 10),
@@ -457,4 +504,4 @@ class _ProfileCardState extends State<_ProfileCard> {
       },
     );
   }
-}
+}

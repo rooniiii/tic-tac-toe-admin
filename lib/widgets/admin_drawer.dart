@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../theme/app_theme.dart';
 
 class AdminDrawer extends StatelessWidget {
   final int selectedIndex;
@@ -14,12 +15,6 @@ class AdminDrawer extends StatelessWidget {
     this.isSidebar = false,
   });
 
-  static const Color background = Color(0xFF0B0B2B);
-  static const Color purple = Color(0xFF7B2FF7);
-  static const Color cyan = Color(0xFF00E5FF);
-  static const Color pink = Color(0xFFFF2BD6);
-  static const Color yellow = Color(0xFFFFD600);
-  static const Color cardColor = Color(0xFF171F35);
 
   static const List<_MenuItem> _menuItems = [
     _MenuItem(
@@ -46,11 +41,15 @@ class AdminDrawer extends StatelessWidget {
       title: 'Manage Admins',
       icon: Icons.admin_panel_settings_rounded,
     ),
+    _MenuItem(
+      title: 'Activity Log',
+      icon: Icons.history_rounded,
+    ),
   ];
 
   Widget _buildContent() {
     return Container(
-      color: background,
+      color: AppTheme.background,
       child: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -64,12 +63,12 @@ class AdminDrawer extends StatelessWidget {
                     width: 48,
                     decoration: BoxDecoration(
                       gradient: const LinearGradient(
-                        colors: [purple, pink],
+                        colors: [AppTheme.purple, AppTheme.neonPink],
                       ),
                       borderRadius: BorderRadius.circular(14),
                       boxShadow: [
                         BoxShadow(
-                          color: purple.withValues(alpha: 0.35),
+                          color: AppTheme.purple.withValues(alpha: 0.35),
                           blurRadius: 14,
                         ),
                       ],
@@ -88,7 +87,7 @@ class AdminDrawer extends StatelessWidget {
                         Text(
                           'NEON XO',
                           style: TextStyle(
-                            color: cyan,
+                            color: AppTheme.neonCyan,
                             fontSize: 19,
                             fontWeight: FontWeight.bold,
                             letterSpacing: 1.2,
@@ -134,7 +133,7 @@ class AdminDrawer extends StatelessWidget {
                     padding: const EdgeInsets.only(bottom: 7),
                     child: Material(
                       color: isSelected
-                          ? purple.withValues(alpha: 0.22)
+                          ? AppTheme.purple.withValues(alpha: 0.22)
                           : Colors.transparent,
                       borderRadius: BorderRadius.circular(12),
                       child: InkWell(
@@ -149,7 +148,7 @@ class AdminDrawer extends StatelessWidget {
                             borderRadius: BorderRadius.circular(12),
                             border: isSelected
                                 ? Border.all(
-                              color: cyan.withValues(alpha: 0.55),
+                              color: AppTheme.neonCyan.withValues(alpha: 0.55),
                             )
                                 : null,
                           ),
@@ -158,7 +157,7 @@ class AdminDrawer extends StatelessWidget {
                               Icon(
                                 item.icon,
                                 color: isSelected
-                                    ? cyan
+                                    ? AppTheme.neonCyan
                                     : Colors.white60,
                                 size: 21,
                               ),
@@ -180,7 +179,7 @@ class AdminDrawer extends StatelessWidget {
                               if (isSelected)
                                 const Icon(
                                   Icons.arrow_forward_ios_rounded,
-                                  color: cyan,
+                                  color: AppTheme.neonCyan,
                                   size: 13,
                                 ),
                             ],
@@ -254,7 +253,7 @@ class AdminDrawer extends StatelessWidget {
       return SizedBox(
         width: 260,
         child: Material(
-          color: background,
+          color: AppTheme.background,
           elevation: 8,
           child: _buildContent(),
         ),
@@ -262,7 +261,7 @@ class AdminDrawer extends StatelessWidget {
     }
 
     return Drawer(
-      backgroundColor: background,
+      backgroundColor: AppTheme.background,
       width: 290,
       child: _buildContent(),
     );
