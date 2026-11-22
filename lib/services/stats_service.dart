@@ -49,27 +49,24 @@ class StatsService {
   /// Totals for the dashboard. Uses aggregation queries (count / sum), which
   /// cost one read per 1000 documents instead of reading every document.
   Future<OverviewStats> getOverview() async {
-    final results = await Future.wait<Object>([
+    // Each sum is its own query: summing several fields in ONE query would
+    // need a composite index in Firestore, a single field does not.
+    final results = await Future.wait<AggregateQuerySnapshot>([
       _users.count().get(),
       _users.where('isBlocked', isEqualTo: true).count().get(),
       _gameHistory.count().get(),
-      _playerStats
-          .aggregate(sum('wins'), sum('losses'), sum('draws'))
-          .get(),
+      _playerStats.aggregate(sum('wins')).get(),
+      _playerStats.aggregate(sum('losses')).get(),
+      _playerStats.aggregate(sum('draws')).get(),
     ]);
 
-    final players = results[0] as AggregateQuerySnapshot;
-    final blocked = results[1] as AggregateQuerySnapshot;
-    final games = results[2] as AggregateQuerySnapshot;
-    final sums = results[3] as AggregateQuerySnapshot;
-
     return OverviewStats(
-      totalPlayers: players.count ?? 0,
-      blockedPlayers: blocked.count ?? 0,
-      totalGames: games.count ?? 0,
-      totalWins: (sums.getSum('wins') ?? 0).toInt(),
-      totalLosses: (sums.getSum('losses') ?? 0).toInt(),
-      totalDraws: (sums.getSum('draws') ?? 0).toInt(),
+      totalPlayers: results[0].count ?? 0,
+      blockedPlayers: results[1].count ?? 0,
+      totalGames: results[2].count ?? 0,
+      totalWins: (results[3].getSum('wins') ?? 0).toInt(),
+      totalLosses: (results[4].getSum('losses') ?? 0).toInt(),
+      totalDraws: (results[5].getSum('draws') ?? 0).toInt(),
     );
   }
 
