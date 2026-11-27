@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../models/admin_model.dart';
 import '../services/admin_service.dart';
@@ -15,6 +16,17 @@ class _ManageAdminsScreenState extends State<ManageAdminsScreen> {
   final AdminService _adminService = AdminService();
 
   final _createFormKey = GlobalKey<FormState>();
+
+  final _nameFieldKey = GlobalKey<FormFieldState<String>>();
+  final _emailFieldKey = GlobalKey<FormFieldState<String>>();
+  final _passwordFieldKey = GlobalKey<FormFieldState<String>>();
+  final _confirmFieldKey = GlobalKey<FormFieldState<String>>();
+
+  final FocusNode _nameFocus = FocusNode();
+  final FocusNode _emailFocus = FocusNode();
+  final FocusNode _passwordFocus = FocusNode();
+  final FocusNode _confirmFocus = FocusNode();
+
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
@@ -28,14 +40,44 @@ class _ManageAdminsScreenState extends State<ManageAdminsScreen> {
   bool _isCreating = false;
   bool _isAddingByUid = false;
   bool _showPassword = false;
+  bool _submitted = false;
+
   String? _busyUid;
   String _searchQuery = '';
-
 
   @override
   void initState() {
     super.initState();
+
     _adminsStream = _adminService.getAdmins();
+
+    _nameFocus.addListener(() {
+      if (!_nameFocus.hasFocus &&
+          (_nameController.text.isNotEmpty || _submitted)) {
+        _nameFieldKey.currentState?.validate();
+      }
+    });
+
+    _emailFocus.addListener(() {
+      if (!_emailFocus.hasFocus &&
+          (_emailController.text.isNotEmpty || _submitted)) {
+        _emailFieldKey.currentState?.validate();
+      }
+    });
+
+    _passwordFocus.addListener(() {
+      if (!_passwordFocus.hasFocus &&
+          (_passwordController.text.isNotEmpty || _submitted)) {
+        _passwordFieldKey.currentState?.validate();
+      }
+    });
+
+    _confirmFocus.addListener(() {
+      if (!_confirmFocus.hasFocus &&
+          (_confirmController.text.isNotEmpty || _submitted)) {
+        _confirmFieldKey.currentState?.validate();
+      }
+    });
   }
 
   @override
@@ -44,8 +86,15 @@ class _ManageAdminsScreenState extends State<ManageAdminsScreen> {
     _emailController.dispose();
     _passwordController.dispose();
     _confirmController.dispose();
+
     _uidController.dispose();
     _searchController.dispose();
+
+    _nameFocus.dispose();
+    _emailFocus.dispose();
+    _passwordFocus.dispose();
+    _confirmFocus.dispose();
+
     super.dispose();
   }
 
@@ -54,6 +103,7 @@ class _ManageAdminsScreenState extends State<ManageAdminsScreen> {
 
   void _showMessage(String message) {
     if (!mounted) return;
+
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
@@ -76,8 +126,14 @@ class _ManageAdminsScreenState extends State<ManageAdminsScreen> {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
         ),
-        title: Text(title, style: const TextStyle(color: AppTheme.neonCyan)),
-        content: Text(body, style: const TextStyle(color: Colors.white70)),
+        title: Text(
+          title,
+          style: const TextStyle(color: AppTheme.neonCyan),
+        ),
+        content: Text(
+          body,
+          style: const TextStyle(color: Colors.white70),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),
@@ -103,9 +159,12 @@ class _ManageAdminsScreenState extends State<ManageAdminsScreen> {
   // ---------------------------------------------------------------------------
 
   Future<void> _createAdmin() async {
+    _submitted = true;
+
     if (!_createFormKey.currentState!.validate()) return;
 
     FocusScope.of(context).unfocus();
+
     setState(() => _isCreating = true);
 
     final name = _nameController.text.trim();
@@ -120,11 +179,7 @@ class _ManageAdminsScreenState extends State<ManageAdminsScreen> {
 
       if (!mounted) return;
 
-      _createFormKey.currentState!.reset();
-      _nameController.clear();
-      _emailController.clear();
-      _passwordController.clear();
-      _confirmController.clear();
+      _clearCreateForm();
 
       _showMessage(
         'Admin $name created. They can now sign in with $email.',
@@ -154,7 +209,9 @@ class _ManageAdminsScreenState extends State<ManageAdminsScreen> {
           name: name.isNotEmpty ? name : (e.playerName ?? ''),
           email: e.email,
         );
+
         _clearCreateForm();
+
         _showMessage('Admin access granted to ${e.email}.');
       } catch (err) {
         _showMessage(_cleanError(err));
@@ -162,15 +219,23 @@ class _ManageAdminsScreenState extends State<ManageAdminsScreen> {
     } catch (e) {
       _showMessage(_cleanError(e));
     } finally {
-      if (mounted) setState(() => _isCreating = false);
+      if (mounted) {
+        setState(() => _isCreating = false);
+      }
     }
   }
 
   void _clearCreateForm() {
+    _submitted = false;
+
     _nameController.clear();
     _emailController.clear();
     _passwordController.clear();
     _confirmController.clear();
+
+    _createFormKey.currentState?.reset();
+
+    if (mounted) setState(() {});
   }
 
   Future<void> _addByUid() async {
@@ -182,17 +247,22 @@ class _ManageAdminsScreenState extends State<ManageAdminsScreen> {
     }
 
     FocusScope.of(context).unfocus();
+
     setState(() => _isAddingByUid = true);
 
     try {
       await _adminService.addAdmin(uid);
+
       if (!mounted) return;
+
       _uidController.clear();
       _showMessage('Admin access granted.');
     } catch (e) {
       _showMessage(_cleanError(e));
     } finally {
-      if (mounted) setState(() => _isAddingByUid = false);
+      if (mounted) {
+        setState(() => _isAddingByUid = false);
+      }
     }
   }
 
@@ -217,6 +287,7 @@ class _ManageAdminsScreenState extends State<ManageAdminsScreen> {
 
     try {
       await _adminService.sendPasswordReset(admin.email);
+
       _showMessage('Password reset email sent to ${admin.email}.');
     } catch (e) {
       _showMessage(_cleanError(e));
@@ -263,14 +334,35 @@ class _ManageAdminsScreenState extends State<ManageAdminsScreen> {
       suffixIcon: suffix,
       filled: true,
       fillColor: AppTheme.surface,
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+      ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: AppTheme.purple.withValues(alpha: 0.4)),
+        borderSide: BorderSide(
+          color: AppTheme.purple.withValues(alpha: 0.4),
+        ),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: AppTheme.neonCyan, width: 1.5),
+        borderSide: const BorderSide(
+          color: AppTheme.neonCyan,
+          width: 1.5,
+        ),
+      ),
+      errorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(
+          color: Colors.redAccent,
+          width: 1.5,
+        ),
+      ),
+      focusedErrorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(
+          color: Colors.redAccent,
+          width: 1.5,
+        ),
       ),
     );
   }
@@ -290,7 +382,10 @@ class _ManageAdminsScreenState extends State<ManageAdminsScreen> {
         const SizedBox(height: 5),
         Text(
           subtitle,
-          style: const TextStyle(color: Colors.white60, fontSize: 12),
+          style: const TextStyle(
+            color: Colors.white60,
+            fontSize: 12,
+          ),
         ),
       ],
     );
@@ -327,76 +422,254 @@ class _ManageAdminsScreenState extends State<ManageAdminsScreen> {
     );
   }
 
+  // ---------------------------------------------------------------------------
+  // Create Admin Form
+  // ---------------------------------------------------------------------------
+
   Widget _createAdminForm() {
     return Form(
       key: _createFormKey,
+      autovalidateMode: AutovalidateMode.disabled,
       child: Column(
         children: [
+          // FULL NAME
           TextFormField(
+            key: _nameFieldKey,
             controller: _nameController,
+            focusNode: _nameFocus,
             style: const TextStyle(color: Colors.white),
+            textCapitalization: TextCapitalization.words,
             textInputAction: TextInputAction.next,
-            decoration: _input('Full Name', Icons.badge_outlined),
-            validator: (v) =>
-                v == null || v.trim().isEmpty ? 'Name is required' : null,
-          ),
-          const SizedBox(height: 12),
-          TextFormField(
-            controller: _emailController,
-            style: const TextStyle(color: Colors.white),
-            keyboardType: TextInputType.emailAddress,
-            textInputAction: TextInputAction.next,
-            autocorrect: false,
-            maxLength: AdminService.maxEmailLength,
-            decoration: _input('Email Address', Icons.email_outlined)
-                .copyWith(
-              helperText: 'Maximum ${AdminService.maxEmailLength} characters',
+            inputFormatters: [
+              FilteringTextInputFormatter.allow(
+                RegExp(r'[a-zA-Z ]'),
+              ),
+            ],
+            maxLength: 40,
+            maxLengthEnforcement: MaxLengthEnforcement.enforced,
+            decoration: _input(
+              'Full Name',
+              Icons.badge_outlined,
+            ).copyWith(
+              helperText: 'Maximum 40 characters',
               helperStyle: const TextStyle(color: Colors.white54),
               counterStyle: const TextStyle(color: Colors.white54),
             ),
             validator: (v) {
               final value = v?.trim() ?? '';
-              if (value.isEmpty) return 'Email is required';
+
+              if (value.isEmpty) {
+                return _submitted ? 'Name is required' : null;
+              }
+
+              if (value.length < 3) {
+                return 'Name must be at least 3 letters';
+              }
+
+              if (value.length > 40) {
+                return 'Name must be at most 40 characters';
+              }
+
+              if (!RegExp(r'^[a-zA-Z ]+$').hasMatch(value)) {
+                return 'Only alphabets are allowed';
+              }
+
+              return null;
+            },
+            onChanged: (_) {
+              if (_submitted ||
+                  (_nameFieldKey.currentState?.hasError ?? false)) {
+                _nameFieldKey.currentState?.validate();
+              }
+            },
+          ),
+
+          const SizedBox(height: 12),
+
+          // EMAIL
+          TextFormField(
+            key: _emailFieldKey,
+            controller: _emailController,
+            focusNode: _emailFocus,
+            style: const TextStyle(color: Colors.white),
+            keyboardType: TextInputType.emailAddress,
+            textInputAction: TextInputAction.next,
+            autocorrect: false,
+            maxLength: AdminService.maxEmailLength,
+            maxLengthEnforcement: MaxLengthEnforcement.enforced,
+            decoration: _input(
+              'Email Address',
+              Icons.email_outlined,
+            ).copyWith(
+              helperText:
+                  'Maximum ${AdminService.maxEmailLength} characters',
+              helperStyle: const TextStyle(color: Colors.white54),
+              counterStyle: const TextStyle(color: Colors.white54),
+            ),
+            validator: (v) {
+              final value = v?.trim() ?? '';
+
+              if (value.isEmpty) {
+                return _submitted ? 'Email is required' : null;
+              }
+
               if (value.length > AdminService.maxEmailLength) {
                 return 'At most ${AdminService.maxEmailLength} characters';
               }
-              final ok = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(value);
+
+              final ok = RegExp(
+                r'^[^@\s]+@[^@\s]+\.[^@\s]+$',
+              ).hasMatch(value);
+
               return ok ? null : 'Enter a valid email';
             },
+            onChanged: (_) {
+              if (_submitted ||
+                  (_emailFieldKey.currentState?.hasError ?? false)) {
+                _emailFieldKey.currentState?.validate();
+              }
+            },
           ),
+
           const SizedBox(height: 12),
+
+          // PASSWORD
           TextFormField(
+            key: _passwordFieldKey,
             controller: _passwordController,
+            focusNode: _passwordFocus,
             style: const TextStyle(color: Colors.white),
             obscureText: !_showPassword,
             textInputAction: TextInputAction.next,
+            maxLength: 40,
+            maxLengthEnforcement: MaxLengthEnforcement.enforced,
             decoration: _input(
               'Temporary Password',
               Icons.lock_outline,
               suffix: IconButton(
-                onPressed: () =>
-                    setState(() => _showPassword = !_showPassword),
+                onPressed: () {
+                  setState(() => _showPassword = !_showPassword);
+                },
                 icon: Icon(
-                  _showPassword ? Icons.visibility_off : Icons.visibility,
+                  _showPassword
+                      ? Icons.visibility_off
+                      : Icons.visibility,
                   color: Colors.white54,
                 ),
               ),
+            ).copyWith(
+              helperText:
+                  '8–40 characters • 1 uppercase (A-Z) • '
+                  '1 lowercase (a-z) • 1 number (0-9) • '
+                  '1 special character (!@#\$)',
+              helperMaxLines: 3,
+              helperStyle: const TextStyle(
+                color: Colors.white54,
+                fontSize: 11,
+              ),
+              counterStyle: const TextStyle(color: Colors.white54),
             ),
-            validator: (v) => (v ?? '').length < 8
-                ? 'At least 8 characters'
-                : null,
+            validator: (v) {
+              final value = v ?? '';
+
+              if (value.isEmpty) {
+                return _submitted ? 'Password is required' : null;
+              }
+
+              if (value.length < 8) {
+                return 'Password must be at least 8 characters';
+              }
+
+              if (value.length > 40) {
+                return 'Password must be at most 40 characters';
+              }
+
+              if (!RegExp(r'[A-Z]').hasMatch(value)) {
+                return 'At least one uppercase letter is required';
+              }
+
+              if (!RegExp(r'[a-z]').hasMatch(value)) {
+                return 'At least one lowercase letter is required';
+              }
+
+              if (!RegExp(r'[0-9]').hasMatch(value)) {
+                return 'At least one number is required';
+              }
+
+              if (!RegExp(r'[!@#\$%^&*(),.?":{}|<>_\-]').hasMatch(value)) {
+                return 'At least one special character is required';
+              }
+
+              return null;
+            },
+            onChanged: (_) {
+              if (_submitted ||
+                  (_passwordFieldKey.currentState?.hasError ?? false)) {
+                _passwordFieldKey.currentState?.validate();
+              }
+
+              if (_confirmController.text.isNotEmpty ||
+                  _submitted ||
+                  (_confirmFieldKey.currentState?.hasError ?? false)) {
+                _confirmFieldKey.currentState?.validate();
+              }
+            },
           ),
+
           const SizedBox(height: 12),
+
+          // CONFIRM PASSWORD
           TextFormField(
+            key: _confirmFieldKey,
             controller: _confirmController,
+            focusNode: _confirmFocus,
             style: const TextStyle(color: Colors.white),
             obscureText: !_showPassword,
-            decoration: _input('Confirm Password', Icons.lock_reset),
-            validator: (v) => v != _passwordController.text
-                ? 'Passwords do not match'
-                : null,
+            maxLength: 40,
+            maxLengthEnforcement: MaxLengthEnforcement.enforced,
+            decoration: _input(
+              'Confirm Password',
+              Icons.lock_reset,
+              suffix: IconButton(
+                onPressed: () {
+                  setState(() => _showPassword = !_showPassword);
+                },
+                icon: Icon(
+                  _showPassword
+                      ? Icons.visibility_off
+                      : Icons.visibility,
+                  color: Colors.white54,
+                ),
+              ),
+            ).copyWith(
+              helperText: 'Maximum 40 characters',
+              helperStyle: const TextStyle(color: Colors.white54),
+              counterStyle: const TextStyle(color: Colors.white54),
+            ),
+            validator: (v) {
+              final value = v ?? '';
+
+              if (value.isEmpty) {
+                return _submitted ? 'Please retype the password' : null;
+              }
+
+              if (value.length > 40) {
+                return 'Password must be at most 40 characters';
+              }
+
+              if (value != _passwordController.text) {
+                return 'Passwords do not match';
+              }
+
+              return null;
+            },
+            onChanged: (_) {
+              _confirmFieldKey.currentState?.validate();
+            },
           ),
+
           const SizedBox(height: 12),
+
           _primaryButton(
             busy: _isCreating,
             onPressed: _createAdmin,
@@ -404,25 +677,36 @@ class _ManageAdminsScreenState extends State<ManageAdminsScreen> {
             label: 'Create Admin',
             busyLabel: 'Creating...',
           ),
+
           const SizedBox(height: 10),
+
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: AppTheme.neonYellow.withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: AppTheme.neonYellow.withValues(alpha: 0.3)),
+              border: Border.all(
+                color: AppTheme.neonYellow.withValues(alpha: 0.3),
+              ),
             ),
             child: const Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.info_outline, color: AppTheme.neonYellow, size: 19),
+                Icon(
+                  Icons.info_outline,
+                  color: AppTheme.neonYellow,
+                  size: 19,
+                ),
                 SizedBox(width: 9),
                 Expanded(
                   child: Text(
                     'Creates a new login and gives it Admin access. Share '
                     'the temporary password privately; the new Admin can '
                     'change it with "Forgot password" on the login screen.',
-                    style: TextStyle(color: Colors.white70, fontSize: 11),
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: 11,
+                    ),
                   ),
                 ),
               ],
@@ -433,26 +717,41 @@ class _ManageAdminsScreenState extends State<ManageAdminsScreen> {
     );
   }
 
+  // ---------------------------------------------------------------------------
+  // Add existing account by UID
+  // ---------------------------------------------------------------------------
+
   Widget _addByUidSection() {
     return Theme(
-      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+      data: Theme.of(context).copyWith(
+        dividerColor: Colors.transparent,
+      ),
       child: ExpansionTile(
         tilePadding: EdgeInsets.zero,
         iconColor: AppTheme.neonCyan,
         collapsedIconColor: Colors.white54,
         title: const Text(
           'Add existing account by UID',
-          style: TextStyle(color: Colors.white70, fontSize: 14),
+          style: TextStyle(
+            color: Colors.white70,
+            fontSize: 14,
+          ),
         ),
         subtitle: const Text(
           'For a login that already exists in Firebase Authentication.',
-          style: TextStyle(color: Colors.white38, fontSize: 11),
+          style: TextStyle(
+            color: Colors.white38,
+            fontSize: 11,
+          ),
         ),
         children: [
           TextField(
             controller: _uidController,
             style: const TextStyle(color: Colors.white),
-            decoration: _input('Firebase Authentication UID', Icons.fingerprint),
+            decoration: _input(
+              'Firebase Authentication UID',
+              Icons.fingerprint,
+            ),
           ),
           const SizedBox(height: 10),
           _primaryButton(
@@ -467,6 +766,10 @@ class _ManageAdminsScreenState extends State<ManageAdminsScreen> {
       ),
     );
   }
+
+  // ---------------------------------------------------------------------------
+  // Admin Card
+  // ---------------------------------------------------------------------------
 
   Widget _adminCard(AdminModel admin, bool isCurrentAdmin) {
     final isBusy = _busyUid == admin.uid;
@@ -493,7 +796,9 @@ class _ManageAdminsScreenState extends State<ManageAdminsScreen> {
                   : AppTheme.purple.withValues(alpha: 0.2),
               child: Icon(
                 Icons.admin_panel_settings,
-                color: isCurrentAdmin ? AppTheme.neonCyan : AppTheme.neonPink,
+                color: isCurrentAdmin
+                    ? AppTheme.neonCyan
+                    : AppTheme.neonPink,
                 size: 25,
               ),
             ),
@@ -540,13 +845,21 @@ class _ManageAdminsScreenState extends State<ManageAdminsScreen> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    admin.email.isNotEmpty ? admin.email : 'Email not recorded',
-                    style: const TextStyle(color: Colors.white70, fontSize: 12),
+                    admin.email.isNotEmpty
+                        ? admin.email
+                        : 'Email not recorded',
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 12,
+                    ),
                   ),
                   const SizedBox(height: 2),
                   SelectableText(
                     admin.uid,
-                    style: const TextStyle(color: Colors.white38, fontSize: 10),
+                    style: const TextStyle(
+                      color: Colors.white38,
+                      fontSize: 10,
+                    ),
                   ),
                 ],
               ),
@@ -567,12 +880,21 @@ class _ManageAdminsScreenState extends State<ManageAdminsScreen> {
               IconButton(
                 tooltip: 'Send Password Reset Email',
                 onPressed: () => _sendReset(admin),
-                icon: const Icon(Icons.lock_reset, color: AppTheme.neonYellow),
+                icon: const Icon(
+                  Icons.lock_reset,
+                  color: AppTheme.neonYellow,
+                ),
               ),
               IconButton(
                 tooltip: 'Remove Admin Access',
-                onPressed: () => _removeAdmin(admin, isCurrentAdmin),
-                icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                onPressed: () => _removeAdmin(
+                  admin,
+                  isCurrentAdmin,
+                ),
+                icon: const Icon(
+                  Icons.delete_outline,
+                  color: Colors.redAccent,
+                ),
               ),
             ],
           ],
@@ -611,7 +933,9 @@ class _ManageAdminsScreenState extends State<ManageAdminsScreen> {
 
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(
-              child: CircularProgressIndicator(color: AppTheme.neonCyan),
+              child: CircularProgressIndicator(
+                color: AppTheme.neonCyan,
+              ),
             );
           }
 
@@ -633,7 +957,9 @@ class _ManageAdminsScreenState extends State<ManageAdminsScreen> {
                 decoration: BoxDecoration(
                   color: AppTheme.surface,
                   borderRadius: BorderRadius.circular(15),
-                  border: Border.all(color: AppTheme.neonCyan.withValues(alpha: 0.4)),
+                  border: Border.all(
+                    color: AppTheme.neonCyan.withValues(alpha: 0.4),
+                  ),
                 ),
                 child: Row(
                   children: [
@@ -646,7 +972,10 @@ class _ManageAdminsScreenState extends State<ManageAdminsScreen> {
                     const Expanded(
                       child: Text(
                         'Total Admin Accounts',
-                        style: TextStyle(color: Colors.white70, fontSize: 13),
+                        style: TextStyle(
+                          color: Colors.white70,
+                          fontSize: 13,
+                        ),
                       ),
                     ),
                     Text(
@@ -660,21 +989,31 @@ class _ManageAdminsScreenState extends State<ManageAdminsScreen> {
                   ],
                 ),
               ),
+
               const SizedBox(height: 25),
+
               _sectionTitle(
                 'Create New Admin',
                 'Set up a new Admin login with email and password.',
               ),
+
               const SizedBox(height: 13),
+
               _createAdminForm(),
+
               const SizedBox(height: 8),
+
               _addByUidSection(),
+
               const SizedBox(height: 20),
+
               _sectionTitle(
                 'Existing Admins',
                 'All Admins have the same permissions.',
               ),
+
               const SizedBox(height: 13),
+
               TextField(
                 controller: _searchController,
                 style: const TextStyle(color: Colors.white),
@@ -686,13 +1025,19 @@ class _ManageAdminsScreenState extends State<ManageAdminsScreen> {
                       _searchController.clear();
                       setState(() => _searchQuery = '');
                     },
-                    icon: const Icon(Icons.clear, color: Colors.white70),
+                    icon: const Icon(
+                      Icons.clear,
+                      color: Colors.white70,
+                    ),
                   ),
                 ),
-                onChanged: (value) =>
-                    setState(() => _searchQuery = value.trim()),
+                onChanged: (value) {
+                  setState(() => _searchQuery = value.trim());
+                },
               ),
+
               const SizedBox(height: 15),
+
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -706,11 +1051,16 @@ class _ManageAdminsScreenState extends State<ManageAdminsScreen> {
                   ),
                   Text(
                     '${filteredAdmins.length} found',
-                    style: const TextStyle(color: Colors.white60, fontSize: 12),
+                    style: const TextStyle(
+                      color: Colors.white60,
+                      fontSize: 12,
+                    ),
                   ),
                 ],
               ),
+
               const SizedBox(height: 12),
+
               if (filteredAdmins.isEmpty)
                 Container(
                   padding: const EdgeInsets.all(25),
@@ -720,7 +1070,11 @@ class _ManageAdminsScreenState extends State<ManageAdminsScreen> {
                   ),
                   child: const Column(
                     children: [
-                      Icon(Icons.person_search, color: AppTheme.neonPink, size: 38),
+                      Icon(
+                        Icons.person_search,
+                        color: AppTheme.neonPink,
+                        size: 38,
+                      ),
                       SizedBox(height: 10),
                       Text(
                         'No Admin accounts found.',
@@ -731,7 +1085,10 @@ class _ManageAdminsScreenState extends State<ManageAdminsScreen> {
                 )
               else
                 ...filteredAdmins.map(
-                  (admin) => _adminCard(admin, admin.uid == currentUid),
+                  (admin) => _adminCard(
+                    admin,
+                    admin.uid == currentUid,
+                  ),
                 ),
             ],
           );

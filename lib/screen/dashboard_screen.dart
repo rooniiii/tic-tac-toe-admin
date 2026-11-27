@@ -34,7 +34,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Future<void> _refresh() async {
     final future = _statsService.getOverview();
-    setState(() => _overviewFuture = future);
+
+    setState(() {
+      _overviewFuture = future;
+    });
+
     await future;
   }
 
@@ -159,7 +163,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   physics: const NeverScrollableScrollPhysics(),
                   crossAxisSpacing: 14,
                   mainAxisSpacing: 14,
-                  childAspectRatio: 1.25,
+                  childAspectRatio: 1.1,
                   children: [
                     _statCard('Total Players', stats.totalPlayers,
                         Icons.people, AppTheme.neonCyan),

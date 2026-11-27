@@ -137,16 +137,43 @@ class AdminService {
     final cleanName = name.trim();
     final cleanEmail = email.trim().toLowerCase();
 
-    if (cleanName.isEmpty || cleanEmail.isEmpty) {
-      throw Exception('Name and email are required.');
+    if (cleanName.isEmpty) {
+      throw Exception('Name is required.');
+    }
+
+    if (cleanName.length < 3) {
+      throw Exception('Name must be at least 3 letters.');
+    }
+
+    if (cleanName.length > 40) {
+      throw Exception('Name must be at most 40 characters.');
+    }
+
+    if (!RegExp(r'^[a-zA-Z ]+$').hasMatch(cleanName)) {
+      throw Exception('Only alphabets are allowed in name.');
+    }
+
+    if (cleanEmail.isEmpty) {
+      throw Exception('Email is required.');
     }
 
     if (cleanEmail.length > maxEmailLength) {
       throw Exception('Email must be at most $maxEmailLength characters.');
     }
 
-    if (password.length < 8) {
-      throw Exception('Password must be at least 8 characters.');
+    if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(cleanEmail)) {
+      throw Exception('Enter a valid email address.');
+    }
+
+    final passwordIsValid = password.length >= 8 &&
+        password.length <= 40 &&
+        RegExp(r'[A-Z]').hasMatch(password) &&
+        RegExp(r'[a-z]').hasMatch(password) &&
+        RegExp(r'[0-9]').hasMatch(password) &&
+        RegExp(r'[!@#\$%^&*(),.?":{}|<>_\-]').hasMatch(password);
+
+    if (!passwordIsValid) {
+      throw Exception('Password does not meet all the rules.');
     }
 
     final creatorAuth = await _creatorAuth();

@@ -23,7 +23,6 @@ class _UsersScreenState extends State<UsersScreen> {
   late Stream<List<UserModel>> _usersStream;
   late Future<UserCounts> _countsFuture;
 
-
   @override
   void initState() {
     super.initState();
@@ -44,8 +43,11 @@ class _UsersScreenState extends State<UsersScreen> {
     });
   }
 
+  // Fixed: setState callback is synchronous.
   void _refreshCounts() {
-    setState(() => _countsFuture = _service.getCounts());
+    setState(() {
+      _countsFuture = _service.getCounts();
+    });
   }
 
   void _message(String message) {
@@ -65,7 +67,10 @@ class _UsersScreenState extends State<UsersScreen> {
         backgroundColor: AppTheme.surface,
         title: const Text(
           'Edit Player',
-          style: TextStyle(color: AppTheme.neonCyan, fontWeight: FontWeight.bold),
+          style: TextStyle(
+            color: AppTheme.neonCyan,
+            fontWeight: FontWeight.bold,
+          ),
         ),
         content: Form(
           key: formKey,
@@ -78,9 +83,10 @@ class _UsersScreenState extends State<UsersScreen> {
                   controller: nameController,
                   style: const TextStyle(color: Colors.white),
                   decoration: const InputDecoration(labelText: 'Display Name'),
-                  validator: (value) => value == null || value.trim().isEmpty
-                      ? 'Name is required'
-                      : null,
+                  validator: (value) =>
+                      value == null || value.trim().isEmpty
+                          ? 'Name is required'
+                          : null,
                 ),
                 const SizedBox(height: 16),
                 _detail('Email (login)', user.email),
@@ -352,7 +358,13 @@ class _UsersScreenState extends State<UsersScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: const TextStyle(color: AppTheme.neonCyan, fontSize: 12)),
+          Text(
+            label,
+            style: const TextStyle(
+              color: AppTheme.neonCyan,
+              fontSize: 12,
+            ),
+          ),
           SelectableText(
             value,
             style: const TextStyle(color: Colors.white70),
@@ -401,7 +413,9 @@ class _UsersScreenState extends State<UsersScreen> {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
         side: BorderSide(
-          color: blocked ? AppTheme.neonPink : AppTheme.purple.withValues(alpha: 0.5),
+          color: blocked
+              ? AppTheme.neonPink
+              : AppTheme.purple.withValues(alpha: 0.5),
         ),
       ),
       child: Padding(
@@ -411,8 +425,12 @@ class _UsersScreenState extends State<UsersScreen> {
             Row(
               children: [
                 CircleAvatar(
-                  backgroundColor: blocked ? AppTheme.neonPink : AppTheme.neonCyan,
-                  child: const Icon(Icons.person, color: AppTheme.background),
+                  backgroundColor:
+                      blocked ? AppTheme.neonPink : AppTheme.neonCyan,
+                  child: const Icon(
+                    Icons.person,
+                    color: AppTheme.background,
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -450,13 +468,26 @@ class _UsersScreenState extends State<UsersScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('Games: ${user.gamesPlayed}',
-                    style: const TextStyle(color: Colors.white70, fontSize: 12)),
-                Text('Wins: ${user.wins}',
-                    style: const TextStyle(color: AppTheme.neonCyan, fontSize: 12)),
+                Text(
+                  'Games: ${user.gamesPlayed}',
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 12,
+                  ),
+                ),
+                Text(
+                  'Wins: ${user.wins}',
+                  style: const TextStyle(
+                    color: AppTheme.neonCyan,
+                    fontSize: 12,
+                  ),
+                ),
                 Text(
                   'Win rate: ${user.winRate.toStringAsFixed(1)}%',
-                  style: const TextStyle(color: AppTheme.neonYellow, fontSize: 12),
+                  style: const TextStyle(
+                    color: AppTheme.neonYellow,
+                    fontSize: 12,
+                  ),
                 ),
               ],
             ),
@@ -467,17 +498,26 @@ class _UsersScreenState extends State<UsersScreen> {
                 IconButton(
                   tooltip: 'View Profile',
                   onPressed: () => _showDetails(user),
-                  icon: const Icon(Icons.visibility_outlined, color: AppTheme.neonCyan),
+                  icon: const Icon(
+                    Icons.visibility_outlined,
+                    color: AppTheme.neonCyan,
+                  ),
                 ),
                 IconButton(
                   tooltip: 'Edit Player',
                   onPressed: () => _editPlayer(user),
-                  icon: const Icon(Icons.edit_outlined, color: AppTheme.neonYellow),
+                  icon: const Icon(
+                    Icons.edit_outlined,
+                    color: AppTheme.neonYellow,
+                  ),
                 ),
                 IconButton(
                   tooltip: 'Send Password Reset Email',
                   onPressed: () => _sendPasswordReset(user),
-                  icon: const Icon(Icons.lock_reset, color: Colors.white70),
+                  icon: const Icon(
+                    Icons.lock_reset,
+                    color: Colors.white70,
+                  ),
                 ),
                 IconButton(
                   tooltip: blocked ? 'Unblock Player' : 'Block Player',
@@ -490,7 +530,10 @@ class _UsersScreenState extends State<UsersScreen> {
                 IconButton(
                   tooltip: 'Delete Player',
                   onPressed: () => _deleteUser(user),
-                  icon: const Icon(Icons.delete_outline, color: AppTheme.neonPink),
+                  icon: const Icon(
+                    Icons.delete_outline,
+                    color: AppTheme.neonPink,
+                  ),
                 ),
               ],
             ),
@@ -527,7 +570,9 @@ class _UsersScreenState extends State<UsersScreen> {
 
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(
-              child: CircularProgressIndicator(color: AppTheme.neonCyan),
+              child: CircularProgressIndicator(
+                color: AppTheme.neonCyan,
+              ),
             );
           }
 
@@ -555,11 +600,23 @@ class _UsersScreenState extends State<UsersScreen> {
                         final counts = countSnapshot.data;
                         return Row(
                           children: [
-                            _stat('TOTAL', counts?.total ?? 0, AppTheme.neonCyan),
+                            _stat(
+                              'TOTAL',
+                              counts?.total ?? 0,
+                              AppTheme.neonCyan,
+                            ),
                             const SizedBox(width: 8),
-                            _stat('ACTIVE', counts?.active ?? 0, AppTheme.neonYellow),
+                            _stat(
+                              'ACTIVE',
+                              counts?.active ?? 0,
+                              AppTheme.neonYellow,
+                            ),
                             const SizedBox(width: 8),
-                            _stat('BLOCKED', counts?.blocked ?? 0, AppTheme.neonPink),
+                            _stat(
+                              'BLOCKED',
+                              counts?.blocked ?? 0,
+                              AppTheme.neonPink,
+                            ),
                           ],
                         );
                       },
@@ -570,14 +627,21 @@ class _UsersScreenState extends State<UsersScreen> {
                       onChanged: (value) => setState(() => _search = value),
                       style: const TextStyle(color: Colors.white),
                       decoration: InputDecoration(
-                        hintText: 'Search loaded players: name, email, phone',
-                        prefixIcon: const Icon(Icons.search, color: AppTheme.neonCyan),
+                        hintText:
+                            'Search loaded players: name, email, phone',
+                        prefixIcon: const Icon(
+                          Icons.search,
+                          color: AppTheme.neonCyan,
+                        ),
                         suffixIcon: IconButton(
                           onPressed: () {
                             _searchController.clear();
                             setState(() => _search = '');
                           },
-                          icon: const Icon(Icons.clear, color: Colors.white54),
+                          icon: const Icon(
+                            Icons.clear,
+                            color: Colors.white54,
+                          ),
                         ),
                         filled: true,
                         fillColor: AppTheme.surface,
@@ -592,29 +656,29 @@ class _UsersScreenState extends State<UsersScreen> {
               Expanded(
                 child: users.isEmpty && !canLoadMore
                     ? Center(
-                  child: Text(
-                    allUsers.isEmpty
-                        ? 'No registered players found.'
-                        : 'No matching players found.',
-                    style: const TextStyle(color: Colors.white70),
-                  ),
-                )
+                        child: Text(
+                          allUsers.isEmpty
+                              ? 'No registered players found.'
+                              : 'No matching players found.',
+                          style: const TextStyle(color: Colors.white70),
+                        ),
+                      )
                     : ListView.builder(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-                  itemCount: users.length + (canLoadMore ? 1 : 0),
-                  itemBuilder: (context, index) {
-                    if (index == users.length) {
-                      return LoadMoreButton(
-                        shown: allUsers.length,
-                        onPressed: _loadMore,
-                        hint: query.isEmpty
-                            ? null
-                            : 'Search only covers loaded players.',
-                      );
-                    }
-                    return _playerCard(users[index]);
-                  },
-                ),
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                        itemCount: users.length + (canLoadMore ? 1 : 0),
+                        itemBuilder: (context, index) {
+                          if (index == users.length) {
+                            return LoadMoreButton(
+                              shown: allUsers.length,
+                              onPressed: _loadMore,
+                              hint: query.isEmpty
+                                  ? null
+                                  : 'Search only covers loaded players.',
+                            );
+                          }
+                          return _playerCard(users[index]);
+                        },
+                      ),
               ),
             ],
           );
@@ -622,4 +686,4 @@ class _UsersScreenState extends State<UsersScreen> {
       ),
     );
   }
-}
+}
