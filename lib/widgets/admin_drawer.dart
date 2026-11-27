@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
+import 'change_password_dialog.dart';
 
 class AdminDrawer extends StatelessWidget {
   final int selectedIndex;
@@ -45,9 +46,13 @@ class AdminDrawer extends StatelessWidget {
       title: 'Activity Log',
       icon: Icons.history_rounded,
     ),
+    _MenuItem(
+      title: 'Advertisements',
+      icon: Icons.campaign_rounded,
+    ),
   ];
 
-  Widget _buildContent() {
+  Widget _buildContent(BuildContext context) {
     return Container(
       color: AppTheme.background,
       child: SafeArea(
@@ -200,6 +205,39 @@ class AdminDrawer extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   Material(
+                    color: Colors.transparent,
+                    borderRadius: BorderRadius.circular(12),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(12),
+                      onTap: () {
+                        // Close the mobile drawer first; the sidebar stays.
+                        if (!isSidebar) Navigator.pop(context);
+                        ChangePasswordDialog.show(context);
+                      },
+                      child: const Padding(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 11,
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.password_rounded,
+                              color: Colors.white60,
+                              size: 21,
+                            ),
+                            SizedBox(width: 13),
+                            Text(
+                              'Change my password',
+                              style: TextStyle(color: Colors.white70),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Material(
                     color: Colors.redAccent.withValues(alpha: 0.10),
                     borderRadius: BorderRadius.circular(12),
                     child: InkWell(
@@ -255,7 +293,7 @@ class AdminDrawer extends StatelessWidget {
         child: Material(
           color: AppTheme.background,
           elevation: 8,
-          child: _buildContent(),
+          child: _buildContent(context),
         ),
       );
     }
@@ -263,7 +301,7 @@ class AdminDrawer extends StatelessWidget {
     return Drawer(
       backgroundColor: AppTheme.background,
       width: 290,
-      child: _buildContent(),
+      child: _buildContent(context),
     );
   }
 }

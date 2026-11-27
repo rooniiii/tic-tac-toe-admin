@@ -3,7 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/game_model.dart';
 
 class GameService {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  late final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   CollectionReference<Map<String, dynamic>> get _games =>
       _firestore.collection('game_history');

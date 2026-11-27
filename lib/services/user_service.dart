@@ -16,7 +16,7 @@ class UserCounts {
 }
 
 class UserService {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  late final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final AdminLogService _log = AdminLogService();
 
   CollectionReference<Map<String, dynamic>> get _users =>

@@ -16,7 +16,13 @@ enum AdminAction {
   playerRenamed('Renamed player', Icons.edit, AppTheme.neonYellow),
   bioEdited('Edited bio', Icons.edit_note, AppTheme.neonYellow),
   bioDeleted('Deleted bio', Icons.delete_outline, AppTheme.neonPink),
-  passwordResetSent('Sent password reset', Icons.lock_reset, Colors.white70);
+  passwordResetSent('Sent password reset', Icons.lock_reset, Colors.white70),
+  ownPasswordChanged('Changed own password', Icons.password, Colors.white70),
+  adCreated('Created ad', Icons.campaign, AppTheme.neonCyan),
+  adUpdated('Edited ad', Icons.edit, AppTheme.neonYellow),
+  adActivated('Activated ad', Icons.play_circle, Colors.greenAccent),
+  adDeactivated('Paused ad', Icons.pause_circle, AppTheme.neonPink),
+  adDeleted('Deleted ad', Icons.delete_forever, Colors.redAccent);
 
   final String label;
   final IconData icon;
@@ -76,7 +82,7 @@ class AdminLogEntry {
 /// Writes and reads the `admin_logs` collection: who did what, to whom, and
 /// when. Entries cannot be edited or deleted (enforced by the rules).
 class AdminLogService {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  late final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   CollectionReference<Map<String, dynamic>> get _logs =>
       _firestore.collection('admin_logs');

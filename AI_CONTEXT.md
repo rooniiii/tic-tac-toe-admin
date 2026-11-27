@@ -91,7 +91,10 @@ tic-tac-toe-admin/
       load_more_button.dart      "Showing the first N / Load more"
       simple_charts.dart         ChartCard, VerticalBarChart,
                                  StackedRatioBar, HorizontalBarList
-  test/widget_test.dart          default template only
+  test/                          `flutter test` (no Firebase needed):
+    widget_test.dart             login screen smoke + empty-login check
+    models_test.dart             models, activity log, InputSanitizer
+    widgets_test.dart            change-password dialog, load more, charts
 ```
 
 ---------------------------------------------------------------------------
@@ -263,7 +266,9 @@ created by hand (Auth console + `admins/<uid>` doc with `role: "admin"`).
 - No re-authentication before destructive actions (decided not to add).
 - Only Android configured (web version was considered and declined).
 - `dashboard_card.dart` is unused legacy.
-- No automated tests yet (only the default template test).
+- Tests cover models, helpers and widgets without Firebase. Screens that
+  read Firestore (users, ads, stats …) have no widget tests yet (they need
+  a Firestore fake such as fake_cloud_firestore).
 - `DropdownButtonFormField(value: ...)` may show a deprecation hint on newer
   Flutter (`initialValue`).
 
@@ -280,3 +285,37 @@ Rules are deployed from the game folder, not from here.
 First admin: create login in Firebase console → Authentication, then add
 Firestore doc `admins/<uid>` with `role: "admin"`; more admins can then be
 created in the app (Manage Admins → Create New Admin).
+
+---------------------------------------------------------------------------
+## 11. Features added 2026-11-27
+---------------------------------------------------------------------------
+
+**Advertisements (menu index 7, `screen/ads_screen.dart`,
+`services/ad_service.dart`, `models/ad_model.dart`)** – full CRUD for the
+Firestore `ads` collection the game shows with a countdown (default 15 s,
+slider 5–60). Fields: title ≤ 60, message ≤ 200, imageUrl (https, ≤ 500),
+countdownSeconds, active, createdAt/By, updatedAt/By. Values are cleaned by
+`services/input_sanitizer.dart` and validated again by the rules. Gestures
+on an ad card: swipe right = preview (zoomable image), swipe left = delete
+(confirmation), double-tap = pause/activate, tap = edit. The same actions
+are in the ⋮ menu and as screen-reader custom actions. Logged actions:
+adCreated, adUpdated, adActivated, adDeactivated, adDeleted.
+
+**Registered Users gestures** – swipe right / double-tap = view profile,
+swipe left = delete (opens the existing confirmation dialog).
+
+**Change my password** – drawer entry → `ChangePasswordDialog` →
+`AdminService.changeOwnPassword` (re-authenticates with the current
+password, then `updatePassword`; logs ownPasswordChanged). Players'
+passwords still go through "Send password reset" (Spark plan).
+
+**Idle timeout** – `AdminNavigationShell` signs the admin out after 15
+minutes without touch/key input (global pointer route + keyboard handler,
+also checked on app resume).
+
+Rules for `ads` live in `tic-tac-toe/firestore.rules` – redeploy from the
+game folder.
+
+**Testability** – `NeonXOAdminApp(home: ...)` lets tests show any screen
+inside the real theme (default `AdminAppRoot`). Firebase instances in
+services are `late final` (lazy) so constructing them needs no Firebase.

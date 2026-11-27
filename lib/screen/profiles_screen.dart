@@ -13,7 +13,7 @@ class ProfilesScreen extends StatefulWidget {
 }
 
 class _ProfilesScreenState extends State<ProfilesScreen> {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  late final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   static const int _pageSize = 25;
   int _limit = _pageSize;

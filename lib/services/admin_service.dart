@@ -41,8 +41,8 @@ class AdminService {
   /// The same limit is used in the game and in the Firestore rules.
   static const int maxEmailLength = 254;
 
-  final FirebaseAuth _auth = FirebaseAuth.instance;
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  late final FirebaseAuth _auth = FirebaseAuth.instance;
+  late final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final AdminLogService _log = AdminLogService();
 
   CollectionReference<Map<String, dynamic>> get _admins =>
@@ -377,6 +377,48 @@ class AdminService {
         return 'No login exists for this email.';
       default:
         return 'Firebase error: $code';
+    }
+  }
+
+  /// Changes the signed-in admin's own password. Firebase requires a recent
+  /// login for this, so the current password is checked first
+  /// (re-authentication) - a stolen unlocked phone cannot change it.
+  Future<void> changeOwnPassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    final user = _auth.currentUser;
+    final email = user?.email;
+
+    if (user == null || email == null) {
+      throw Exception('You are not signed in.');
+    }
+    if (newPassword.length < 8 || newPassword.length > 128) {
+      throw Exception('New password must be 8–128 characters.');
+    }
+    if (newPassword == currentPassword) {
+      throw Exception('The new password must be different.');
+    }
+
+    try {
+      await user.reauthenticateWithCredential(
+        EmailAuthProvider.credential(email: email, password: currentPassword),
+      );
+      await user.updatePassword(newPassword);
+      await _log.log(
+        AdminAction.ownPasswordChanged,
+        targetUid: user.uid,
+        details: 'Admin account $email',
+      );
+    } on FirebaseAuthException catch (e) {
+      switch (e.code) {
+        case 'wrong-password':
+        case 'invalid-credential':
+        case 'invalid-login-credentials':
+          throw Exception('Current password is incorrect.');
+        default:
+          throw Exception(_authError(e.code));
+      }
     }
   }
 

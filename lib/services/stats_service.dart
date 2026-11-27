@@ -28,7 +28,7 @@ class DailyGames {
 }
 
 class StatsService {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  late final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   CollectionReference<Map<String, dynamic>> get _playerStats =>
       _firestore.collection('player_stats');

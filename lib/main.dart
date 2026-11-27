@@ -1,4 +1,8 @@
+import 'dart:async';
+
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -12,6 +16,7 @@ import 'screen/statistics_screen.dart';
 import 'screen/game_history_screen.dart';
 import 'screen/manage_admins_screen.dart';
 import 'screen/activity_log_screen.dart';
+import 'screen/ads_screen.dart';
 import 'widgets/admin_drawer.dart';
 import 'theme/app_theme.dart';
 
@@ -26,7 +31,11 @@ Future<void> main() async {
 }
 
 class NeonXOAdminApp extends StatelessWidget {
-  const NeonXOAdminApp({super.key});
+  /// First screen. Defaults to the admin login gate; tests pass a screen
+  /// that does not need Firebase.
+  final Widget home;
+
+  const NeonXOAdminApp({super.key, this.home = const AdminAppRoot()});
 
   @override
   Widget build(BuildContext context) {
@@ -34,7 +43,7 @@ class NeonXOAdminApp extends StatelessWidget {
       title: 'NEON XO Admin',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.darkTheme,
-      home: const AdminAppRoot(),
+      home: home,
     );
   }
 }
@@ -126,8 +135,73 @@ class AdminNavigationShell extends StatefulWidget {
       _AdminNavigationShellState();
 }
 
-class _AdminNavigationShellState extends State<AdminNavigationShell> {
+class _AdminNavigationShellState extends State<AdminNavigationShell>
+    with WidgetsBindingObserver {
   int _selectedIndex = 0;
+
+  /// Admin sessions end automatically after this much inactivity, so an
+  /// unattended phone does not stay logged in to the admin panel.
+  static const Duration _idleTimeout = Duration(minutes: 15);
+
+  Timer? _idleTimer;
+  DateTime _lastActivity = DateTime.now();
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    // Global hooks: also catch activity inside dialogs and menus, which are
+    // drawn above this widget.
+    GestureBinding.instance.pointerRouter.addGlobalRoute(_onPointer);
+    HardwareKeyboard.instance.addHandler(_onKey);
+    _resetIdleTimer();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    GestureBinding.instance.pointerRouter.removeGlobalRoute(_onPointer);
+    HardwareKeyboard.instance.removeHandler(_onKey);
+    _idleTimer?.cancel();
+    super.dispose();
+  }
+
+  void _onPointer(PointerEvent event) {
+    if (event is PointerDownEvent || event is PointerSignalEvent) {
+      _resetIdleTimer();
+    }
+  }
+
+  bool _onKey(KeyEvent event) {
+    _resetIdleTimer();
+    return false; // never consume the key
+  }
+
+  void _resetIdleTimer() {
+    _lastActivity = DateTime.now();
+    _idleTimer?.cancel();
+    _idleTimer = Timer(_idleTimeout, _onIdleTimeout);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Timers do not run reliably in the background: check on resume.
+    if (state == AppLifecycleState.resumed &&
+        DateTime.now().difference(_lastActivity) >= _idleTimeout) {
+      _onIdleTimeout();
+    }
+  }
+
+  void _onIdleTimeout() {
+    if (!mounted) return;
+    _idleTimer?.cancel();
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+      const SnackBar(
+        content: Text('Signed out after 15 minutes of inactivity.'),
+      ),
+    );
+    widget.onLogout();
+  }
 
   static const List<String> _titles = [
     'Dashboard Overview',
@@ -137,6 +211,7 @@ class _AdminNavigationShellState extends State<AdminNavigationShell> {
     'Game History',
     'Manage Admins',
     'Activity Log',
+    'Advertisements',
   ];
 
   Widget _getSelectedScreen() {
@@ -155,6 +230,8 @@ class _AdminNavigationShellState extends State<AdminNavigationShell> {
         return const ManageAdminsScreen();
       case 6:
         return const ActivityLogScreen();
+      case 7:
+        return const AdsScreen();
       default:
         return DashboardScreen(onLogout: widget.onLogout);
     }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 
 import '../models/user_model.dart';
 import '../services/user_service.dart';
@@ -404,6 +405,63 @@ class _UsersScreenState extends State<UsersScreen> {
     );
   }
 
+  /// Gesture shortcuts (each also available in the card's buttons and as
+  /// a screen-reader action): swipe right = view profile, swipe left =
+  /// delete (opens the normal confirmation), double-tap = view profile.
+  Widget _swipeablePlayerCard(UserModel user) {
+    Widget background(Alignment alignment, Color color, IconData icon,
+        String label) {
+      return Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        alignment: alignment,
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.25),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: color),
+            const SizedBox(width: 8),
+            Text(label,
+                style: TextStyle(color: color, fontWeight: FontWeight.bold)),
+          ],
+        ),
+      );
+    }
+
+    return Semantics(
+      customSemanticsActions: {
+        const CustomSemanticsAction(label: 'View profile'): () =>
+            _showDetails(user),
+        const CustomSemanticsAction(label: 'Delete player'): () =>
+            _deleteUser(user),
+      },
+      child: Dismissible(
+        key: ValueKey('player-${user.uid}'),
+        background: background(Alignment.centerLeft, AppTheme.neonCyan,
+            Icons.badge_outlined, 'View profile'),
+        secondaryBackground: background(Alignment.centerRight,
+            Colors.redAccent, Icons.delete_forever, 'Delete'),
+        // Always snap back; a confirmed delete removes the player through
+        // the Firestore stream.
+        confirmDismiss: (direction) async {
+          if (direction == DismissDirection.startToEnd) {
+            _showDetails(user);
+          } else {
+            await _deleteUser(user);
+          }
+          return false;
+        },
+        child: GestureDetector(
+          onDoubleTap: () => _showDetails(user),
+          child: _playerCard(user),
+        ),
+      ),
+    );
+  }
+
   Widget _playerCard(UserModel user) {
     final blocked = user.isBlocked;
 
@@ -676,7 +734,7 @@ class _UsersScreenState extends State<UsersScreen> {
                                   : 'Search only covers loaded players.',
                             );
                           }
-                          return _playerCard(users[index]);
+                          return _swipeablePlayerCard(users[index]);
                         },
                       ),
               ),
