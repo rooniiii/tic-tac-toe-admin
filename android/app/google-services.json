@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "928116268638",
+    "project_id": "tic-tac-toe-4ab92",
+    "storage_bucket": "tic-tac-toe-4ab92.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:928116268638:android:11d99ddcff87d5ee129ecf",
+        "android_client_info": {
+          "package_name": "com.example.neon_xo_admin"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBy9PPXQXRNgcnB4BKLIPzt8xHGrv-s0ek"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:928116268638:android:51e8fef524e4b307129ecf",
+        "android_client_info": {
+          "package_name": "com.example.tic_tac_toe"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBy9PPXQXRNgcnB4BKLIPzt8xHGrv-s0ek"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

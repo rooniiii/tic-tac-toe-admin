@@ -1,0 +1,701 @@
+import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+
+import '../services/admin_service.dart';
+
+class AdminLoginScreen extends StatefulWidget {
+  final VoidCallback onLoginSuccess;
+
+  const AdminLoginScreen({
+    super.key,
+    required this.onLoginSuccess,
+  });
+
+  @override
+  State<AdminLoginScreen> createState() => _AdminLoginScreenState();
+}
+
+class _AdminLoginScreenState extends State<AdminLoginScreen> {
+  final AdminService _adminService = AdminService();
+
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+
+  final FocusNode _emailFocusNode = FocusNode();
+  final FocusNode _passwordFocusNode = FocusNode();
+
+  bool _obscurePassword = true;
+  bool _isLoading = false;
+  bool _validationStarted = false;
+
+  String? _emailError;
+  String? _passwordError;
+
+  static const Color _backgroundColor = Color(0xFF08051B);
+  static const Color _cardColor = Color(0xFF15102E);
+  static const Color _cyanColor = Color(0xFF00E5FF);
+  static const Color _pinkColor = Color(0xFFFF35C6);
+  static const Color _purpleColor = Color(0xFF9D4DFF);
+  static const Color _textColor = Colors.white70;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _emailFocusNode.addListener(() {
+      if (!_emailFocusNode.hasFocus &&
+          _emailController.text.isNotEmpty) {
+        _validateEmail();
+      }
+    });
+
+    _passwordFocusNode.addListener(() {
+      if (!_passwordFocusNode.hasFocus &&
+          _passwordController.text.isNotEmpty) {
+        _validatePassword();
+      }
+    });
+  }
+
+  String? _checkEmail(String email) {
+    if (email.trim().isEmpty) {
+      return 'Email is required';
+    }
+
+    if (email.trim().length > AdminService.maxEmailLength) {
+      return 'Email must be at most ${AdminService.maxEmailLength} characters';
+    }
+
+    final emailPattern =
+    RegExp(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$');
+
+    if (!emailPattern.hasMatch(email.trim())) {
+      return 'Please enter a valid email address';
+    }
+
+    return null;
+  }
+
+  String? _checkPassword(String password) {
+    if (password.isEmpty) {
+      return 'Password is required';
+    }
+
+    return null;
+  }
+
+  void _validateEmail() {
+    if (!mounted) return;
+
+    setState(() {
+      _emailError = _checkEmail(_emailController.text);
+    });
+  }
+
+  void _validatePassword() {
+    if (!mounted) return;
+
+    setState(() {
+      _passwordError = _checkPassword(_passwordController.text);
+    });
+  }
+
+  void _onEmailChanged(String value) {
+    if (_validationStarted || _emailError != null) {
+      setState(() {
+        _emailError = _checkEmail(value);
+      });
+    }
+  }
+
+  void _onPasswordChanged(String value) {
+    if (_validationStarted || _passwordError != null) {
+      setState(() {
+        _passwordError = _checkPassword(value);
+      });
+    }
+  }
+
+  Future<void> _login() async {
+    FocusScope.of(context).unfocus();
+
+    setState(() {
+      _validationStarted = true;
+      _emailError = _checkEmail(_emailController.text);
+      _passwordError = _checkPassword(_passwordController.text);
+    });
+
+    if (_emailError != null || _passwordError != null) {
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      await _adminService.login(
+        email: _emailController.text.trim(),
+        password: _passwordController.text,
+      );
+
+      if (!mounted) return;
+
+      widget.onLoginSuccess();
+    } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
+
+      String message;
+
+      switch (e.code) {
+        case 'invalid-email':
+          message = 'Please enter a valid email address.';
+          break;
+        case 'user-not-found':
+        case 'wrong-password':
+        case 'invalid-credential':
+          message = 'Incorrect email or password.';
+          break;
+        case 'user-disabled':
+          message = 'This account has been disabled.';
+          break;
+        case 'too-many-requests':
+          message = 'Too many attempts. Please try again later.';
+          break;
+        case 'network-request-failed':
+          message = 'Network error. Please check your internet.';
+          break;
+        default:
+          message = 'Login failed. Please try again.';
+      }
+
+      _showMessage(message);
+    } catch (e) {
+      if (!mounted) return;
+
+      _showMessage(
+        e.toString().replaceFirst('Exception: ', ''),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _forgotPassword() async {
+    FocusScope.of(context).unfocus();
+
+    final emailError = _checkEmail(_emailController.text);
+
+    setState(() {
+      _emailError = emailError;
+    });
+
+    if (emailError != null) {
+      return;
+    }
+
+    try {
+      await FirebaseAuth.instance.sendPasswordResetEmail(
+        email: _emailController.text.trim(),
+      );
+
+      if (!mounted) return;
+
+      _showMessage(
+        'Password reset email has been sent. Please check your inbox.',
+      );
+    } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
+
+      String message;
+
+      switch (e.code) {
+        case 'invalid-email':
+          message = 'Please enter a valid email address.';
+          break;
+        case 'user-not-found':
+          message = 'No account found with this email.';
+          break;
+        case 'network-request-failed':
+          message = 'Network error. Please check your internet.';
+          break;
+        default:
+          message = 'Unable to send reset email. Please try again.';
+      }
+
+      _showMessage(message);
+    } catch (_) {
+      if (!mounted) return;
+      _showMessage('Something went wrong. Please try again.');
+    }
+  }
+
+  void _showMessage(String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: _cardColor,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+  }
+
+  Widget _buildInputField({
+    required String label,
+    required String hint,
+    required TextEditingController controller,
+    required FocusNode focusNode,
+    required IconData icon,
+    required String? errorText,
+    required ValueChanged<String> onChanged,
+    bool isPassword = false,
+  }) {
+    final hasError = errorText != null;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.5,
+          ),
+        ),
+        const SizedBox(height: 10),
+        Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: [
+              BoxShadow(
+                color: hasError
+                    ? Colors.redAccent.withValues(alpha: 0.12)
+                    : _cyanColor.withValues(alpha: 0.09),
+                blurRadius: 16,
+                spreadRadius: 1,
+              ),
+            ],
+          ),
+          child: TextField(
+            controller: controller,
+            focusNode: focusNode,
+            obscureText: isPassword ? _obscurePassword : false,
+            enableSuggestions: !isPassword,
+            autocorrect: !isPassword,
+            keyboardType: isPassword
+                ? TextInputType.text
+                : TextInputType.emailAddress,
+            // Email shows a live "12/254" counter; password has no limit.
+            maxLength: isPassword ? null : AdminService.maxEmailLength,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 15,
+            ),
+            onChanged: onChanged,
+            decoration: InputDecoration(
+              hintText: hint,
+              hintStyle: const TextStyle(
+                color: Colors.white38,
+                fontSize: 14,
+              ),
+              counterStyle: const TextStyle(
+                color: Colors.white54,
+                fontSize: 11,
+              ),
+              prefixIcon: Icon(
+                icon,
+                color: _cyanColor,
+                size: 21,
+              ),
+              suffixIcon: isPassword
+                  ? IconButton(
+                onPressed: () {
+                  setState(() {
+                    _obscurePassword = !_obscurePassword;
+                  });
+                },
+                icon: Icon(
+                  _obscurePassword
+                      ? Icons.visibility_off
+                      : Icons.visibility,
+                  color: _pinkColor,
+                ),
+              )
+                  : null,
+              filled: true,
+              fillColor: _cardColor,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 18,
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: BorderSide(
+                  color: hasError
+                      ? Colors.redAccent
+                      : _purpleColor.withValues(alpha: 0.55),
+                  width: 1.2,
+                ),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: const BorderSide(
+                  color: _cyanColor,
+                  width: 1.8,
+                ),
+              ),
+              errorBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: const BorderSide(
+                  color: Colors.redAccent,
+                ),
+              ),
+            ),
+          ),
+        ),
+        if (errorText != null) ...[
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              const Icon(
+                Icons.error_outline,
+                color: Colors.redAccent,
+                size: 15,
+              ),
+              const SizedBox(width: 5),
+              Expanded(
+                child: Text(
+                  errorText,
+                  style: const TextStyle(
+                    color: Colors.redAccent,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    _emailFocusNode.dispose();
+    _passwordFocusNode.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: _backgroundColor,
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Color(0xFF10082B),
+              Color(0xFF08051B),
+              Color(0xFF180925),
+            ],
+          ),
+        ),
+        child: SafeArea(
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 420),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      height: 100,
+                      width: 100,
+                      decoration: BoxDecoration(
+                        color: _cardColor,
+                        borderRadius: BorderRadius.circular(27),
+                        border: Border.all(
+                          color: _cyanColor.withValues(alpha: 0.8),
+                          width: 1.5,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: _cyanColor.withValues(alpha: 0.25),
+                            blurRadius: 28,
+                            spreadRadius: 2,
+                          ),
+                          BoxShadow(
+                            color: _pinkColor.withValues(alpha: 0.16),
+                            blurRadius: 35,
+                            spreadRadius: -4,
+                          ),
+                        ],
+                      ),
+                      child: const Icon(
+                        Icons.admin_panel_settings,
+                        color: _cyanColor,
+                        size: 55,
+                      ),
+                    ),
+
+                    const SizedBox(height: 25),
+
+                    const Text(
+                      'NEON XO',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 34,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 4,
+                        shadows: [
+                          Shadow(
+                            color: _cyanColor,
+                            blurRadius: 18,
+                          ),
+                          Shadow(
+                            color: _pinkColor,
+                            blurRadius: 28,
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 8),
+
+                    const Text(
+                      'ADMIN PANEL',
+                      style: TextStyle(
+                        color: _cyanColor,
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 5,
+                        shadows: [
+                          Shadow(
+                            color: _cyanColor,
+                            blurRadius: 12,
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 12),
+
+                    Container(
+                      width: 90,
+                      height: 3,
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [_cyanColor, _pinkColor],
+                        ),
+                        borderRadius: BorderRadius.circular(10),
+                        boxShadow: [
+                          BoxShadow(
+                            color: _pinkColor.withValues(alpha: 0.6),
+                            blurRadius: 12,
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 38),
+
+                    Container(
+                      padding: const EdgeInsets.all(22),
+                      decoration: BoxDecoration(
+                        color: _cardColor.withValues(alpha: 0.92),
+                        borderRadius: BorderRadius.circular(22),
+                        border: Border.all(
+                          color: _purpleColor.withValues(alpha: 0.65),
+                          width: 1.2,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: _purpleColor.withValues(alpha: 0.15),
+                            blurRadius: 28,
+                            spreadRadius: 2,
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Center(
+                            child: Text(
+                              'ADMIN ACCESS',
+                              style: TextStyle(
+                                color: _pinkColor,
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 3,
+                                shadows: [
+                                  Shadow(
+                                    color: _pinkColor,
+                                    blurRadius: 12,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+
+                          const SizedBox(height: 25),
+
+                          _buildInputField(
+                            label: 'Admin Email',
+                            hint: 'Enter your admin email',
+                            controller: _emailController,
+                            focusNode: _emailFocusNode,
+                            icon: Icons.email_outlined,
+                            errorText: _emailError,
+                            onChanged: _onEmailChanged,
+                          ),
+
+                          const SizedBox(height: 22),
+
+                          _buildInputField(
+                            label: 'Password',
+                            hint: 'Enter your password',
+                            controller: _passwordController,
+                            focusNode: _passwordFocusNode,
+                            icon: Icons.lock_outline,
+                            errorText: _passwordError,
+                            onChanged: _onPasswordChanged,
+                            isPassword: true,
+                          ),
+
+                          const SizedBox(height: 8),
+
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: TextButton(
+                              onPressed:
+                              _isLoading ? null : _forgotPassword,
+                              child: const Text(
+                                'Forgot Password?',
+                                style: TextStyle(
+                                  color: _cyanColor,
+                                  fontWeight: FontWeight.w600,
+                                  shadows: [
+                                    Shadow(
+                                      color: _cyanColor,
+                                      blurRadius: 8,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+
+                          const SizedBox(height: 15),
+
+                          SizedBox(
+                            width: double.infinity,
+                            height: 55,
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                gradient: const LinearGradient(
+                                  colors: [
+                                    _cyanColor,
+                                    _purpleColor,
+                                    _pinkColor,
+                                  ],
+                                ),
+                                borderRadius: BorderRadius.circular(14),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: _cyanColor.withValues(alpha: 0.28),
+                                    blurRadius: 18,
+                                    spreadRadius: 1,
+                                  ),
+                                  BoxShadow(
+                                    color: _pinkColor.withValues(alpha: 0.18),
+                                    blurRadius: 22,
+                                  ),
+                                ],
+                              ),
+                              child: ElevatedButton(
+                                onPressed: _isLoading ? null : _login,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.transparent,
+                                  disabledBackgroundColor: Colors.white12,
+                                  shadowColor: Colors.transparent,
+                                  foregroundColor: _backgroundColor,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                  elevation: 0,
+                                ),
+                                child: _isLoading
+                                    ? const SizedBox(
+                                  height: 23,
+                                  width: 23,
+                                  child: CircularProgressIndicator(
+                                    color: Colors.white,
+                                    strokeWidth: 2.5,
+                                  ),
+                                )
+                                    : const Text(
+                                  'ADMIN LOGIN',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w900,
+                                    letterSpacing: 2,
+                                    shadows: [
+                                      Shadow(
+                                        color: _cyanColor,
+                                        blurRadius: 10,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 27),
+
+                    const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.shield_outlined,
+                          color: _cyanColor,
+                          size: 16,
+                        ),
+                        SizedBox(width: 8),
+                        Text(
+                          'Secure Administrator Access',
+                          style: TextStyle(
+                            color: _textColor,
+                            fontSize: 12,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
